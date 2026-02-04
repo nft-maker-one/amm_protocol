@@ -73,9 +73,8 @@ const SwapPage = () => {
   const [estOutInfo, setEstOutInfo] = useState(null); 
   const [slippagePct, setSlippagePct] = useState('1.0'); 
 
-  // Pool 相关状态
+  // Pool 相关状态（已移除查找/创建池子功能）
   const [selectedPool, setSelectedPool] = useState(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
   
   // 确认弹窗状态
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -84,89 +83,6 @@ const SwapPage = () => {
   const tokenA = tokenAChoice === 'custom' ? tokenACustom : tokenAChoice;
   const tokenB = tokenBChoice === 'custom' ? tokenBCustom : tokenBChoice;
 
-  // --- 队友逻辑 1: 查找池子 ---
-  const handleFactoryLookup = async () => {
-    if (!window.ethereum) return toast.error('请先连接钱包');
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await ensureSepolia(provider);
-
-      if (!ethers.isAddress(tokenA) || !ethers.isAddress(tokenB)) return toast.error('token 地址无效');
-      if (tokenA.toLowerCase() === tokenB.toLowerCase()) return toast.error('两个 token 地址不能相同');
-
-      const fee = Number(feeInput || 3000);
-      const poolAddr = await getPool(provider, tokenA, tokenB, fee);
-
-      if (!poolAddr || poolAddr === ethers.ZeroAddress || poolAddr === '0x0000000000000000000000000000000000000000') {
-        toast('未找到池子，请创建', { icon: '⚠️' });
-        setShowCreateForm(true);
-        return;
-      }
-
-      // 找到池子
-      let poolInfo = {
-          address: poolAddr,
-          token0: tokenA,
-          token1: tokenB,
-          fee: fee,
-          isInitialized: true
-      };
-      
-      // 调用本地修复的函数
-      addPoolToList(poolInfo);
-      
-      setSelectedPool(poolInfo);
-      toast.success(`找到池子: ${poolAddr.substring(0,6)}...`);
-    } catch (err) {
-      toast.error('操作失败: ' + (err.message || err));
-    }
-  };
-
-  // --- 队友逻辑 2: 创建池子 ---
-  const handleCreatePool = async () => {
-    if (!window.ethereum) return toast.error('请先连接钱包');
-    const toastId = toast.loading('准备创建池子...');
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await ensureSepolia(provider);
-
-      if (!ethers.isAddress(tokenA) || !ethers.isAddress(tokenB)) throw new Error('token 地址无效');
-      const fee = Number(feeInput || 3000);
-      
-      const existingPool = await getPool(provider, tokenA, tokenB, fee);
-      if (existingPool && existingPool !== ethers.ZeroAddress) {
-        toast.dismiss(toastId);
-        return toast.error(`池子已存在: ${existingPool}`);
-      }
-
-      const signer = await provider.getSigner();
-      
-      // ⚠️ 如果你的 amm.js 里没有 simulateCreatePool，这一步也会报错
-      // 如果报错，请注释掉下面这个 if 块
-      if (typeof simulateCreatePool === 'function') {
-        try {
-           await simulateCreatePool(provider, signer, tokenA, tokenB, fee);
-        } catch (simErr) {
-           toast.dismiss(toastId);
-           return toast.error('模拟失败: ' + simErr.message);
-        }
-      }
-
-      // ⚠️ 如果你的 amm.js 里没有 createPool，这一行会报错
-      if (typeof createPool !== 'function') {
-         throw new Error("createPool 函数在 api/amm.js 中不存在");
-      }
-
-      await createPool(provider, signer, tokenA, tokenB, fee);
-      
-      toast.success('池子创建请求已发送', { id: toastId });
-      setShowCreateForm(false);
-
-    } catch (err) {
-      toast.dismiss(toastId);
-      toast.error('创建失败: ' + (err.message || err));
-    }
-  };
 
   // --- 队友逻辑 3: 读取选中池子的 Slot0 ---
   const handleReadSlot0 = async () => {
@@ -374,29 +290,14 @@ const SwapPage = () => {
         {swapping ? '计算中...' : '立即兑换'}
       </button>
 
-      {/* 调试工具栏 */}
+      {/* 调试工具栏（已移除查找池子/创建池子功能，仅保留查询 Slot0） */}
       <div style={{marginTop: 20, borderTop: '1px solid #333', paddingTop: 10}}>
          <h4 style={{margin: '0 0 10px 0', color: '#666'}}>开发调试工具</h4>
          <div style={{display: 'flex', gap: 10, flexWrap: 'wrap'}}>
             <button onClick={handleQuerySlot0} style={{padding: '5px 10px', background: 'transparent', border: '1px solid #555', color: '#aaa', cursor:'pointer'}}>
               查询 Slot0
             </button>
-            <button onClick={handleFactoryLookup} style={{padding: '5px 10px', background: 'transparent', border: '1px solid #555', color: '#aaa', cursor:'pointer'}}>
-              查找池子
-            </button>
-            <button onClick={() => setShowCreateForm(!showCreateForm)} style={{padding: '5px 10px', background: 'transparent', border: '1px solid #555', color: '#aaa', cursor:'pointer'}}>
-              {showCreateForm ? '收起创建' : '创建新池子'}
-            </button>
          </div>
-         
-         {showCreateForm && (
-           <div style={{marginTop: 10, padding: 10, border: '1px dashed #444', background: '#111'}}>
-              <p style={{fontSize:'0.9rem'}}>Fee: {feeInput}</p>
-              <button className="action-btn" onClick={handleCreatePool} style={{backgroundColor: '#e63946', fontSize: '0.9rem'}}>
-                确认创建 (消耗 Gas)
-              </button>
-           </div>
-         )}
       </div>
 
     </div>
