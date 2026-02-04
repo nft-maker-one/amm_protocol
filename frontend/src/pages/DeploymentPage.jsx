@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
+import toast from 'react-hot-toast'; // 1. 引入 Toast
+import { 
+  Layers, 
+  PlusCircle, 
+  PlayCircle, 
+  Code, 
+  CheckCircle, 
+  Terminal, 
+  Info,
+  Copy
+} from 'lucide-react'; // 2. 引入图标
+
+// 3. 引入 API (如果有本地 Mock 需求请自行替换)
 import { getPoolList, getSelectedPool, setSelectedPool, updatePoolInList, addPoolToList } from '../api/pools';
 import PoolSelector from '../components/ui/PoolSelector';
 import { TOKEN_LIST, findTokenByAddress } from '../api/tokens';
@@ -40,15 +53,17 @@ const DeploymentPage = () => {
 
   // Pool initialization state
   const [poolAddress, setPoolAddress] = useState('');
-  const [poolPrice, setPoolPrice] = useState('1'); // Price ratio (token0/token1)
-  const [poolSqrtPriceX96, setPoolSqrtPriceX96] = useState('79228162514264337593543950336'); // Default: price = 1
+  const [poolPrice, setPoolPrice] = useState('1'); 
+  const [poolSqrtPriceX96, setPoolSqrtPriceX96] = useState('79228162514264337593543950336'); 
 
+  // --- 1. 部署 Factory ---
   const handleDeployFactory = async () => {
-    if (!window.ethereum) return alert('请先连接钱包');
+    if (!window.ethereum) return toast.error('请先连接钱包');
     if (!factoryBytecode || factoryBytecode.trim() === '') {
-      return alert('请输入Factory合约的bytecode');
+      return toast.error('请输入Factory合约的bytecode');
     }
     
+    const toastId = toast.loading('正在部署 Factory...');
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -57,29 +72,28 @@ const DeploymentPage = () => {
       
       const result = await deployFactory(provider, signer, factoryBytecode);
       setDeployedFactory(result.address);
-      alert(`Factory部署成功！\n地址: ${result.address}\n交易哈希: ${result.tx.hash}`);
+      
+      toast.success((t) => (
+        <span>
+          <b>Factory 部署成功!</b><br/>
+          地址: {result.address.substring(0,8)}...
+        </span>
+      ), { id: toastId, duration: 5000 });
+
     } catch (err) {
-      alert('部署失败: ' + (err.message || err));
+      toast.error('部署失败: ' + (err.message || err), { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
+  // --- 2. 部署 Token ---
   const handleDeployToken = async () => {
-    if (!window.ethereum) return alert('请先连接钱包');
-    if (!tokenBytecode || tokenBytecode.trim() === '') {
-      return alert('请输入Token合约的bytecode');
-    }
-    if (!tokenName || !tokenSymbol) {
-      return alert('请输入代币名称和符号');
-    }
-    if (!tokenDecimals || Number(tokenDecimals) < 0 || Number(tokenDecimals) > 18) {
-      return alert('请输入有效的decimals (0-18)');
-    }
-    if (!tokenInitialSupply || Number(tokenInitialSupply) <= 0) {
-      return alert('请输入有效的初始供应量');
-    }
+    if (!window.ethereum) return toast.error('请先连接钱包');
+    if (!tokenBytecode || tokenBytecode.trim() === '') return toast.error('请输入Token bytecode');
+    if (!tokenName || !tokenSymbol) return toast.error('请输入代币名称和符号');
     
+    const toastId = toast.loading('正在部署 Token...');
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -96,103 +110,63 @@ const DeploymentPage = () => {
         tokenInitialSupply
       );
       setDeployedToken(result.address);
-      alert(`Token部署成功！\n地址: ${result.address}\n交易哈希: ${result.tx.hash}`);
+      
+      toast.success((t) => (
+        <span>
+          <b>Token 部署成功!</b><br/>
+          地址: {result.address.substring(0,8)}...
+        </span>
+      ), { id: toastId });
     } catch (err) {
-      alert('部署失败: ' + (err.message || err));
+      toast.error('部署失败: ' + err.message, { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInitializePool = async () => {
-    if (!window.ethereum) return alert('请先连接钱包');
-    if (!poolAddress || !ethers.isAddress(poolAddress)) {
-      return alert('请输入有效的Pool地址');
-    }
-    if (!poolSqrtPriceX96 || poolSqrtPriceX96.trim() === '') {
-      return alert('请输入sqrtPriceX96');
-    }
-    
-    try {
-      setLoading(true);
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await ensureSepolia(provider);
-      const signer = await provider.getSigner();
-      
-      const sqrtPrice = BigInt(poolSqrtPriceX96);
-      await initializePool(provider, signer, poolAddress, sqrtPrice);
-      
-      // 更新池子状态
-      if (selectedPool) {
-        updatePoolInList(selectedPool.address, {
-          isInitialized: true,
-          sqrtPriceX96: poolSqrtPriceX96,
-          initializedAt: Date.now()
-        });
-      }
-      
-      alert(`Pool初始化成功！\nPool地址: ${poolAddress}\nsqrtPriceX96: ${poolSqrtPriceX96}`);
-    } catch (err) {
-      alert('初始化失败: ' + (err.message || err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 处理创建池子的token选择
+  // --- 3. 创建 Pool ---
   const getCreateTokenA = () => createTokenAChoice === 'custom' ? createTokenACustom : createTokenAChoice;
   const getCreateTokenB = () => createTokenBChoice === 'custom' ? createTokenBCustom : createTokenBChoice;
 
-  // 创建池子功能
   const handleCreatePool = async () => {
-    if (!window.ethereum) return alert('请先连接钱包');
-    
+    if (!window.ethereum) return toast.error('请先连接钱包');
     const tokenA = getCreateTokenA();
     const tokenB = getCreateTokenB();
     
-    if (!ethers.isAddress(tokenA) || !ethers.isAddress(tokenB)) {
-      return alert('token 地址无效');
-    }
-    if (tokenA.toLowerCase() === tokenB.toLowerCase()) {
-      return alert('两个 token 地址不能相同');
-    }
+    if (!ethers.isAddress(tokenA) || !ethers.isAddress(tokenB)) return toast.error('地址无效');
+    if (tokenA.toLowerCase() === tokenB.toLowerCase()) return toast.error('地址不能相同');
     
-    const fee = Number(createFee);
-    if (fee <= 0) {
-      return alert('手续费必须大于0');
-    }
-    
+    const toastId = toast.loading('正在创建 Pool...');
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
       await ensureSepolia(provider);
-      
-      // 检查是否已经存在
+      const fee = Number(createFee);
+
+      // 检查存在
       const existingPool = await getPool(provider, tokenA, tokenB, fee);
       if (existingPool && existingPool !== ethers.ZeroAddress) {
-        return alert(`池子已存在: ${existingPool}`);
+        toast.dismiss(toastId);
+        return toast.error(`池子已存在: ${existingPool}`);
       }
       
       const signer = await provider.getSigner();
       
-      // 模拟创建
+      // 模拟
       try {
         await simulateCreatePool(provider, signer, tokenA, tokenB, fee);
       } catch (simErr) {
-        const msg = (simErr && simErr.message) ? simErr.message : String(simErr);
-        return alert('模拟 createPool 失败（会 revert）：' + msg);
+        toast.dismiss(toastId);
+        return toast.error('模拟失败(会 revert): ' + simErr.message);
       }
       
-      // 创建池子
+      // 执行
       await createPool(provider, signer, tokenA, tokenB, fee);
       
-      // 获取新创建的池子地址
+      // 获取结果
       const newPool = await getPool(provider, tokenA, tokenB, fee);
-      if (!newPool || newPool === ethers.ZeroAddress) {
-        return alert('创建后未返回有效池子地址');
-      }
       
-      // 添加到池子列表
+      // 添加到列表
       const tokenAMeta = findTokenByAddress(tokenA);
       const tokenBMeta = findTokenByAddress(tokenB);
       const poolInfo = {
@@ -205,102 +179,118 @@ const DeploymentPage = () => {
         isInitialized: false
       };
       
-      addPoolToList(poolInfo);
+      if (addPoolToList) addPoolToList(poolInfo);
       setSelectedPool(poolInfo);
       setPoolAddress(newPool);
-      setActiveTab('pool'); // 跳转到初始化标签页
       
-      alert(`池子创建成功！\n地址: ${newPool}\n请继续初始化池子价格`);
+      toast.success('Pool 创建成功! 即将跳转初始化...', { id: toastId });
+      setTimeout(() => setActiveTab('pool'), 1500); // 自动跳转
+
     } catch (err) {
-      alert('创建失败: ' + (err.message || err));
+      toast.error('创建失败: ' + err.message, { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
+  // --- 4. 初始化 Pool ---
   const handleCalculateSqrtPrice = () => {
     try {
       const price = parseFloat(poolPrice);
-      if (isNaN(price) || price <= 0) {
-        return alert('请输入有效的价格（大于0）');
-      }
+      if (isNaN(price) || price <= 0) return toast.error('请输入有效价格');
       const sqrtPrice = calculateSqrtPriceX96(price);
       setPoolSqrtPriceX96(sqrtPrice);
+      toast.success('计算完成');
     } catch (err) {
-      alert('计算失败: ' + (err.message || err));
+      toast.error('计算失败');
     }
   };
 
-  // 当选择池子时更新池子地址
-  const handlePoolSelect = (pool) => {
-    setSelectedPool(pool);
-    if (pool) {
-      setPoolAddress(pool.address);
+  const handleInitializePool = async () => {
+    if (!window.ethereum) return toast.error('请先连接钱包');
+    if (!poolAddress || !ethers.isAddress(poolAddress)) return toast.error('无效 Pool 地址');
+    
+    const toastId = toast.loading('正在初始化价格...');
+    try {
+      setLoading(true);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await ensureSepolia(provider);
+      const signer = await provider.getSigner();
+      
+      const sqrtPrice = BigInt(poolSqrtPriceX96);
+      await initializePool(provider, signer, poolAddress, sqrtPrice);
+      
+      // 更新列表状态
+      if (selectedPool && updatePoolInList) {
+        updatePoolInList(selectedPool.address, {
+          isInitialized: true,
+          sqrtPriceX96: poolSqrtPriceX96,
+          initializedAt: Date.now()
+        });
+      }
+      
+      toast.success('Pool 初始化成功!', { id: toastId });
+    } catch (err) {
+      toast.error('初始化失败: ' + err.message, { id: toastId });
+    } finally {
+      setLoading(false);
     }
   };
+
+  const handlePoolSelect = (pool) => {
+    setSelectedPool(pool);
+    if (pool) setPoolAddress(pool.address);
+  };
+
+  // --- UI 组件 helper ---
+  const TabButton = ({ id, label, icon: Icon }) => (
+    <button 
+      onClick={() => setActiveTab(id)}
+      style={{
+        flex: 1,
+        padding: '12px', 
+        background: activeTab === id ? 'var(--primary)' : '#333', 
+        color: activeTab === id ? 'white' : '#aaa', 
+        border: 'none', 
+        borderRadius: '8px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        transition: 'all 0.2s',
+        fontWeight: activeTab === id ? 'bold' : 'normal'
+      }}
+    >
+      {Icon && <Icon size={16} />}
+      {label}
+    </button>
+  );
 
   return (
     <div className="container">
-      <h2>🚀 合约部署</h2>
+      <h2 style={{display:'flex', alignItems:'center', gap:10}}>🚀 合约部署中心</h2>
       <p style={{color: '#888', marginBottom: '20px'}}>
-        部署AMM协议相关的智能合约。需要先编译合约获取bytecode。
+        一站式管理 AMM 协议的部署流程：Factory &rarr; Token &rarr; Create Pool &rarr; Initialize
       </p>
 
-      <div style={{display: 'flex', gap: '10px', marginBottom: '20px'}}>
-        <button 
-          onClick={() => setActiveTab('factory')}
-          style={{
-            padding: '8px 16px', 
-            background: activeTab === 'factory' ? '#646cff' : '#333', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >部署Factory</button>
-        <button 
-          onClick={() => setActiveTab('token')}
-          style={{
-            padding: '8px 16px', 
-            background: activeTab === 'token' ? '#646cff' : '#333', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >部署Token</button>
-        <button 
-          onClick={() => setActiveTab('create-pool')}
-          style={{
-            padding: '8px 16px', 
-            background: activeTab === 'create-pool' ? '#646cff' : '#333', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >创建Pool</button>
-        <button 
-          onClick={() => setActiveTab('pool')}
-          style={{
-            padding: '8px 16px', 
-            background: activeTab === 'pool' ? '#646cff' : '#333', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >初始化Pool</button>
+      {/* Tabs */}
+      <div style={{display: 'flex', gap: '10px', marginBottom: '25px', background: '#1a1a1a', padding: 5, borderRadius: 10}}>
+        <TabButton id="factory" label="1. Factory" icon={Layers} />
+        <TabButton id="token" label="2. Token" icon={Code} />
+        <TabButton id="create-pool" label="3. Create Pool" icon={PlusCircle} />
+        <TabButton id="pool" label="4. Initialize" icon={PlayCircle} />
       </div>
 
+      {/* --- Tab 1: Factory --- */}
       {activeTab === 'factory' && (
-        <div>
-          <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a1a1a'}}>
-            <h4 style={{marginTop: 0}}>📝 如何获取Factory Bytecode</h4>
-            <ol style={{textAlign: 'left', paddingLeft: '20px', color: '#aaa'}}>
-              <li>在contracts目录下运行: <code style={{background: '#000', padding: '2px 6px', borderRadius: '3px'}}>forge build</code></li>
-              <li>在<code style={{background: '#000', padding: '2px 6px', borderRadius: '3px'}}>out/AMMFactory.sol/AMMFactory.json</code>中找到<code style={{background: '#000', padding: '2px 6px', borderRadius: '3px'}}>bytecode.object</code>字段</li>
-              <li>复制bytecode（以0x开头）并粘贴到下方</li>
+        <div className="fade-in">
+          <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a1a1a', borderLeft: '4px solid #646cff'}}>
+            <h4 style={{marginTop: 0, display:'flex', alignItems:'center', gap:5}}><Terminal size={16}/> 获取 Bytecode 指南</h4>
+            <ol style={{textAlign: 'left', paddingLeft: '20px', color: '#aaa', fontSize: '0.9rem', margin:0}}>
+              <li>运行 <code style={{background: '#000', padding: '2px 4px'}}>forge build</code></li>
+              <li>打开 <code style={{background: '#000', padding: '2px 4px'}}>out/AMMFactory.sol/AMMFactory.json</code></li>
+              <li>复制 <code style={{background: '#000', padding: '2px 4px'}}>bytecode.object</code> (以 0x 开头)</li>
             </ol>
           </div>
 
@@ -311,299 +301,201 @@ const DeploymentPage = () => {
               value={factoryBytecode}
               onChange={e => setFactoryBytecode(e.target.value)}
               style={{
-                width: '100%',
-                minHeight: '100px',
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                padding: '10px',
-                background: '#1a1a1a',
-                color: '#fff',
-                border: '1px solid #333',
-                borderRadius: '4px'
+                width: '100%', minHeight: '120px', fontFamily: 'monospace',
+                fontSize: '12px', padding: '10px', background: '#111',
+                color: '#fff', border: '1px solid #333', borderRadius: '4px'
               }}
             />
           </div>
 
           {deployedFactory && (
-            <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a3a1a'}}>
-              <p style={{margin: 0}}>✅ 已部署Factory: <code style={{color: '#4ade80'}}>{deployedFactory}</code></p>
+            <div className="data-card" style={{backgroundColor: '#1a3a1a', display:'flex', alignItems:'center', gap:10}}>
+              <CheckCircle color="#4ade80" size={20}/>
+              <div>
+                 <div style={{color:'#aaa', fontSize:'0.8rem'}}>Factory Deployed at:</div>
+                 <code style={{color: '#4ade80', fontSize:'1rem'}}>{deployedFactory}</code>
+              </div>
             </div>
           )}
 
-          <button 
-            className="action-btn" 
-            onClick={handleDeployFactory} 
-            disabled={loading}
-          >
-            {loading ? '部署中...' : '部署Factory合约'}
+          <button className="action-btn" onClick={handleDeployFactory} disabled={loading}>
+            {loading ? '部署中...' : '部署 Factory 合约'}
           </button>
         </div>
       )}
 
+      {/* --- Tab 2: Token --- */}
       {activeTab === 'token' && (
-        <div>
-          <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a1a1a'}}>
-            <h4 style={{marginTop: 0}}>📝 如何获取Token Bytecode</h4>
-            <ol style={{textAlign: 'left', paddingLeft: '20px', color: '#aaa'}}>
-              <li>在contracts目录下运行: <code style={{background: '#000', padding: '2px 6px', borderRadius: '3px'}}>forge build</code></li>
-              <li>在<code style={{background: '#000', padding: '2px 6px', borderRadius: '3px'}}>out/MockToken.sol/MockToken.json</code>中找到<code style={{background: '#000', padding: '2px 6px', borderRadius: '3px'}}>bytecode.object</code>字段</li>
-              <li>复制bytecode（以0x开头）并粘贴到下方</li>
-            </ol>
+        <div className="fade-in">
+           <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a1a1a', borderLeft: '4px solid #646cff'}}>
+            <h4 style={{marginTop: 0, display:'flex', alignItems:'center', gap:5}}><Terminal size={16}/> 获取 Token Bytecode 指南</h4>
+            <p style={{color: '#aaa', fontSize: '0.9rem', margin:0}}>
+               请复制 <code style={{background: '#000', padding: '2px 4px'}}>out/MockToken.sol/MockToken.json</code> 中的 bytecode。
+            </p>
           </div>
 
           <div className="input-group">
             <label>Token Bytecode</label>
             <textarea 
-              placeholder="0x608060405234801561001057600080fd5b50..."
+              placeholder="0x..."
               value={tokenBytecode}
               onChange={e => setTokenBytecode(e.target.value)}
               style={{
-                width: '100%',
-                minHeight: '100px',
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                padding: '10px',
-                background: '#1a1a1a',
-                color: '#fff',
-                border: '1px solid #333',
-                borderRadius: '4px'
+                width: '100%', minHeight: '80px', fontFamily: 'monospace',
+                fontSize: '12px', padding: '10px', background: '#111',
+                color: '#fff', border: '1px solid #333', borderRadius: '4px'
               }}
             />
           </div>
 
-          <div className="input-group">
-            <label>代币名称 (Name)</label>
-            <input 
-              type="text" 
-              placeholder="例如: Token A" 
-              value={tokenName}
-              onChange={e => setTokenName(e.target.value)}
-            />
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:15}}>
+             <div className="input-group">
+                <label>Name</label>
+                <input type="text" placeholder="Token A" value={tokenName} onChange={e => setTokenName(e.target.value)} />
+             </div>
+             <div className="input-group">
+                <label>Symbol</label>
+                <input type="text" placeholder="TKNA" value={tokenSymbol} onChange={e => setTokenSymbol(e.target.value)} />
+             </div>
           </div>
-
-          <div className="input-group">
-            <label>代币符号 (Symbol)</label>
-            <input 
-              type="text" 
-              placeholder="例如: TKNA" 
-              value={tokenSymbol}
-              onChange={e => setTokenSymbol(e.target.value)}
-            />
-          </div>
-
-          <div className="input-group">
-            <label>小数位数 (Decimals)</label>
-            <input 
-              type="number" 
-              placeholder="18" 
-              value={tokenDecimals}
-              onChange={e => setTokenDecimals(e.target.value)}
-              min="0"
-              max="18"
-            />
-          </div>
-
-          <div className="input-group">
-            <label>初始供应量 (Initial Supply)</label>
-            <input 
-              type="text" 
-              placeholder="1000000" 
-              value={tokenInitialSupply}
-              onChange={e => setTokenInitialSupply(e.target.value)}
-            />
-            <small style={{color: '#888', marginTop: '5px', display: 'block'}}>
-              注意：实际铸造数量 = {tokenInitialSupply || '0'} × 10^{tokenDecimals || '18'}
-            </small>
+          
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:15}}>
+             <div className="input-group">
+                <label>Decimals</label>
+                <input type="number" placeholder="18" value={tokenDecimals} onChange={e => setTokenDecimals(e.target.value)} />
+             </div>
+             <div className="input-group">
+                <label>Initial Supply</label>
+                <input type="text" placeholder="1000000" value={tokenInitialSupply} onChange={e => setTokenInitialSupply(e.target.value)} />
+             </div>
           </div>
 
           {deployedToken && (
-            <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a3a1a'}}>
-              <p style={{margin: 0}}>✅ 已部署Token: <code style={{color: '#4ade80'}}>{deployedToken}</code></p>
+            <div className="data-card" style={{backgroundColor: '#1a3a1a', display:'flex', alignItems:'center', gap:10}}>
+              <CheckCircle color="#4ade80" size={20}/>
+              <div>
+                 <div style={{color:'#aaa', fontSize:'0.8rem'}}>Token Deployed at:</div>
+                 <code style={{color: '#4ade80', fontSize:'1rem'}}>{deployedToken}</code>
+              </div>
             </div>
           )}
 
-          <button 
-            className="action-btn" 
-            onClick={handleDeployToken} 
-            disabled={loading}
-          >
-            {loading ? '部署中...' : '部署Token合约'}
+          <button className="action-btn" onClick={handleDeployToken} disabled={loading}>
+            {loading ? '部署中...' : '部署 Token 合约'}
           </button>
         </div>
       )}
 
+      {/* --- Tab 3: Create Pool --- */}
       {activeTab === 'create-pool' && (
-        <div>
-          <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a1a1a'}}>
-            <h4 style={{marginTop: 0}}>🏊‍♂️ 创建Pool说明</h4>
-            <p style={{color: '#aaa', margin: '10px 0', textAlign: 'left'}}>
-              创建Pool需要指定两个代币和手续费率。<br/>
-              创建成功后，还需要初始化价格才能开始交易。<br/>
-              系统会自动将新创建的Pool添加到Pool列表中。
-            </p>
+        <div className="fade-in">
+          <div className="data-card" style={{marginBottom: 20}}>
+             <h4 style={{margin:0, display:'flex', alignItems:'center', gap:8}}><Info size={16}/> 创建交易对</h4>
+             <p style={{fontSize:'0.9rem', color:'#888', margin:'5px 0 0 0'}}>
+                选择两个代币和费率层级。创建成功后会自动跳转到初始化页面。
+             </p>
           </div>
 
           <div className="input-group">
             <label>Token A</label>
             <select value={createTokenAChoice} onChange={e=>setCreateTokenAChoice(e.target.value)} style={{width: '100%', marginBottom: '10px'}}>
-              <option value="">选择Token A</option>
+              <option value="">-- 选择 Token A --</option>
               {TOKEN_LIST.map(t => (
-                <option key={t.address} value={t.address}>{t.symbol} - {t.address.slice(0,6)}...{t.address.slice(-4)}</option>
+                <option key={t.address} value={t.address}>{t.symbol} ({t.address.slice(0,6)}...)</option>
               ))}
               <option value="custom">自定义地址...</option>
             </select>
             {createTokenAChoice === 'custom' && (
-              <input
-                placeholder="TokenA 自定义合约地址 0x..."
-                value={createTokenACustom}
-                onChange={e => setCreateTokenACustom(e.target.value)}
-                style={{width: '100%'}}
-              />
+              <input placeholder="0x..." value={createTokenACustom} onChange={e => setCreateTokenACustom(e.target.value)} />
             )}
           </div>
 
           <div className="input-group">
             <label>Token B</label>
             <select value={createTokenBChoice} onChange={e=>setCreateTokenBChoice(e.target.value)} style={{width: '100%', marginBottom: '10px'}}>
-              <option value="">选择Token B</option>
+              <option value="">-- 选择 Token B --</option>
               {TOKEN_LIST.map(t => (
-                <option key={t.address} value={t.address}>{t.symbol} - {t.address.slice(0,6)}...{t.address.slice(-4)}</option>
+                <option key={t.address} value={t.address}>{t.symbol} ({t.address.slice(0,6)}...)</option>
               ))}
               <option value="custom">自定义地址...</option>
             </select>
             {createTokenBChoice === 'custom' && (
-              <input
-                placeholder="TokenB 自定义合约地址 0x..."
-                value={createTokenBCustom}
-                onChange={e => setCreateTokenBCustom(e.target.value)}
-                style={{width: '100%'}}
-              />
+              <input placeholder="0x..." value={createTokenBCustom} onChange={e => setCreateTokenBCustom(e.target.value)} />
             )}
           </div>
 
           <div className="input-group">
-            <label>手续费 (基点, 3000 = 0.3%)</label>
-            <input
-              type="number"
-              placeholder="3000"
-              value={createFee}
-              onChange={e => setCreateFee(e.target.value)}
-              style={{width: '100%'}}
-            />
+            <label>Fee Tier (3000 = 0.3%)</label>
+            <input type="number" placeholder="3000" value={createFee} onChange={e => setCreateFee(e.target.value)} />
           </div>
 
-          <button 
-            onClick={handleCreatePool} 
-            disabled={loading}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: loading ? '#888' : '#646cff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '16px',
-              cursor: loading ? 'not-allowed' : 'pointer'
-            }}
-          >
-            {loading ? '创建中...' : '创建Pool合约'}
+          <button className="action-btn" onClick={handleCreatePool} disabled={loading}>
+            {loading ? '创建中...' : 'Create Pool'}
           </button>
-
-          <div style={{marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '5px'}}>
-            <h4 style={{margin: '0 0 10px 0', color: '#fff'}}>创建流程说明:</h4>
-            <ol style={{color: '#aaa', paddingLeft: '20px', margin: 0}}>
-              <li>选择两个要创建交易对的代币</li>
-              <li>设置手续费率（常用: 500=0.05%, 3000=0.3%, 10000=1%）</li>
-              <li>点击"创建Pool合约"执行创建</li>
-              <li>创建成功后自动跳转到"初始化Pool"页面</li>
-              <li>设置初始价格完成Pool的完整部署</li>
-            </ol>
-          </div>
         </div>
       )}
 
+      {/* --- Tab 4: Initialize Pool --- */}
       {activeTab === 'pool' && (
-        <div>
-          <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a1a1a'}}>
-            <h4 style={{marginTop: 0}}>💡 初始化Pool说明</h4>
-            <p style={{color: '#aaa', margin: '10px 0', textAlign: 'left'}}>
-              在创建Pool后，需要初始化价格才能开始交易。<br/>
-              sqrtPriceX96是价格的平方根乘以2^96的格式。<br/>
-              如果token0/token1的价格比例为1，可以使用默认值。
-            </p>
+        <div className="fade-in">
+           <div className="data-card" style={{marginBottom: 20}}>
+             <h4 style={{margin:0, display:'flex', alignItems:'center', gap:8}}><Info size={16}/> 初始化价格</h4>
+             <p style={{fontSize:'0.9rem', color:'#888', margin:'5px 0 0 0'}}>
+                新池子必须先初始化初始价格 (SqrtPriceX96) 才能开始交易。
+             </p>
           </div>
 
           {/* 池子选择器 */}
-          <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '5px' }}>
-            <h4>选择要初始化的池子</h4>
-            <PoolSelector 
-              selectedPool={selectedPool} 
-              onPoolSelect={handlePoolSelect}
-            />
+          <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #333', borderRadius: '8px', background: '#1a1a1a' }}>
+            <h4 style={{margin: '0 0 10px 0', fontSize:'0.9rem', color:'#aaa'}}>选择目标池子</h4>
+            <PoolSelector selectedPool={selectedPool} onPoolSelect={handlePoolSelect} />
+            
             {selectedPool && (
-              <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e8f5e8', borderRadius: '5px' }}>
-                <strong>选中池子:</strong> {selectedPool.address}<br/>
-                <strong>代币对:</strong> {selectedPool.token0Meta?.symbol || 'TOKEN0'}/{selectedPool.token1Meta?.symbol || 'TOKEN1'}<br/>
-                <strong>状态:</strong> {selectedPool.isInitialized ? '已初始化' : '未初始化'}
-              </div>
+               <div style={{marginTop: 10, padding: 8, background: 'rgba(74, 222, 128, 0.1)', borderRadius: 4, fontSize: '0.85rem'}}>
+                  <div style={{color: '#4ade80'}}><b>已选:</b> {selectedPool.token0Meta?.symbol}/{selectedPool.token1Meta?.symbol}</div>
+                  <div style={{color: '#aaa'}}>{selectedPool.address}</div>
+                  <div style={{marginTop:4}}>{selectedPool.isInitialized ? '✅ 已初始化' : '⚠️ 未初始化'}</div>
+               </div>
             )}
           </div>
 
           <div className="input-group">
-            <label>Pool地址 {selectedPool && <span style={{color: '#888'}}>(自动填充)</span>}</label>
+            <label>Pool Address</label>
             <input 
               placeholder="0x..." 
               value={poolAddress}
               onChange={e => setPoolAddress(e.target.value)}
               disabled={!!selectedPool}
-              style={{backgroundColor: selectedPool ? '#f5f5f5' : 'white'}}
+              style={{backgroundColor: selectedPool ? '#222' : '#111', color: selectedPool ? '#888' : 'white'}}
             />
           </div>
 
           <div className="input-group">
-            <label>价格比例 (token0/token1)</label>
+            <label>初始价格比例 (Token0 / Token1)</label>
             <div style={{display: 'flex', gap: '10px'}}>
               <input 
                 type="number" 
                 placeholder="1.0" 
-                value={poolPrice}
-                onChange={e => setPoolPrice(e.target.value)}
-                style={{flex: 1}}
+                value={poolPrice} 
+                onChange={e => setPoolPrice(e.target.value)} 
               />
-              <button 
-                onClick={handleCalculateSqrtPrice}
-                style={{
-                  padding: '8px 16px',
-                  background: '#333',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                计算
+              <button onClick={handleCalculateSqrtPrice} style={{whiteSpace:'nowrap', padding: '0 15px', cursor:'pointer'}}>
+                计算 SqrtPrice
               </button>
             </div>
           </div>
 
           <div className="input-group">
-            <label>sqrtPriceX96</label>
+            <label>SqrtPriceX96 (计算结果)</label>
             <input 
-              placeholder="79228162514264337593543950336" 
               value={poolSqrtPriceX96}
               onChange={e => setPoolSqrtPriceX96(e.target.value)}
+              placeholder="79228..."
             />
-            <small style={{color: '#888', marginTop: '5px', display: 'block'}}>
-              默认值 (价格=1): 79228162514264337593543950336
-            </small>
           </div>
 
-          <button 
-            className="action-btn" 
-            onClick={handleInitializePool} 
-            disabled={loading}
-          >
-            {loading ? '初始化中...' : '初始化Pool'}
+          <button className="action-btn" onClick={handleInitializePool} disabled={loading}>
+            {loading ? '初始化中...' : 'Initialize Pool'}
           </button>
         </div>
       )}

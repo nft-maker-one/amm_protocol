@@ -1,5 +1,19 @@
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
+import toast from 'react-hot-toast'; // 1. 引入 Toast
+import { 
+  Coins, 
+  Flame, 
+  Search, 
+  User, 
+  Wallet, 
+  AlertCircle, 
+  ArrowRight,
+  CheckCircle,
+  XCircle,
+  Copy
+} from 'lucide-react'; // 2. 引入图标
+
 import { TOKEN_LIST } from '../api/tokens';
 import {
   ensureSepolia,
@@ -20,10 +34,13 @@ const MockTokenPage = () => {
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // --- 逻辑部分 (保留队友原始逻辑) ---
+
   const handleQueryBalance = async () => {
-    if (!window.ethereum) return alert('请先连接钱包');
-    if (!ethers.isAddress(tokenAddr)) return alert('Token 地址无效');
+    if (!window.ethereum) return toast.error('请先连接钱包');
+    if (!ethers.isAddress(tokenAddr)) return toast.error('Token 地址无效');
     
+    const toastId = toast.loading('正在查询合约数据...');
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -34,11 +51,12 @@ const MockTokenPage = () => {
       const bal = await getTokenBalance(provider, tokenAddr, userAddr);
       const info = await getTokenInfo(provider, tokenAddr);
       
-      // Try to get token owner
+      // Try to get token owner (队友逻辑: 兼容非 standard ERC20)
       let owner = null;
       let currentUserIsOwner = false;
       try {
         const token = new ethers.Contract(tokenAddr, ERC20ABI, provider);
+        // 这里可能会 revert 如果合约没有 owner() 方法
         owner = await token.owner();
         setTokenOwner(owner);
         
@@ -46,25 +64,29 @@ const MockTokenPage = () => {
         currentUserIsOwner = owner.toLowerCase() === userAddr.toLowerCase();
         setIsOwner(currentUserIsOwner);
       } catch (err) {
+        console.warn("此代币可能没有 owner() 方法或调用失败", err);
         setTokenOwner(null);
-        setIsOwner(false); // Not a MockToken or doesn't have owner function
+        setIsOwner(false); 
       }
       
       setBalance(ethers.formatUnits(bal, info.decimals));
       setTokenInfo(info);
+      
+      toast.success('查询成功', { id: toastId });
     } catch (err) {
-      alert('查询失败: ' + (err.message || err));
+      toast.error('查询失败: ' + (err.message || err), { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
   const handleMint = async () => {
-    if (!window.ethereum) return alert('请先连接钱包');
-    if (!ethers.isAddress(tokenAddr)) return alert('Token 地址无效');
-    if (!toAddr || !ethers.isAddress(toAddr)) return alert('目标地址无效');
-    if (!amount || Number(amount) <= 0) return alert('数量必须大于 0');
+    if (!window.ethereum) return toast.error('请先连接钱包');
+    if (!ethers.isAddress(tokenAddr)) return toast.error('Token 地址无效');
+    if (!toAddr || !ethers.isAddress(toAddr)) return toast.error('目标地址无效');
+    if (!amount || Number(amount) <= 0) return toast.error('数量必须大于 0');
     
+    const toastId = toast.loading('正在铸造代币...');
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -75,22 +97,34 @@ const MockTokenPage = () => {
       const amountWei = ethers.parseUnits(amount, info.decimals);
       
       await mintToken(provider, signer, tokenAddr, toAddr, amountWei);
-      alert(`成功铸造 ${amount} ${info.symbol} 到 ${toAddr}`);
+      
+      toast.success((t) => (
+        <div>
+           <b>铸造成功!</b>
+           <div style={{fontSize:'0.9rem', marginTop:5}}>
+             +{amount} {info.symbol} <br/>
+             To: {toAddr.slice(0,6)}...{toAddr.slice(-4)}
+           </div>
+        </div>
+      ), { id: toastId });
+
       setAmount('');
-      setToAddr('');
-      handleQueryBalance();
+      // 这里不自动清空 toAddr，方便用户连续操作
+      // setToAddr(''); 
+      handleQueryBalance(); // 刷新余额
     } catch (err) {
-      alert('铸造失败: ' + (err.message || err));
+      toast.error('铸造失败: ' + (err.message || err), { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
   const handleBurn = async () => {
-    if (!window.ethereum) return alert('请先连接钱包');
-    if (!ethers.isAddress(tokenAddr)) return alert('Token 地址无效');
-    if (!amount || Number(amount) <= 0) return alert('数量必须大于 0');
+    if (!window.ethereum) return toast.error('请先连接钱包');
+    if (!ethers.isAddress(tokenAddr)) return toast.error('Token 地址无效');
+    if (!amount || Number(amount) <= 0) return toast.error('数量必须大于 0');
     
+    const toastId = toast.loading('正在销毁代币...');
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -101,174 +135,186 @@ const MockTokenPage = () => {
       const amountWei = ethers.parseUnits(amount, info.decimals);
       
       await burnToken(provider, signer, tokenAddr, amountWei);
-      alert(`成功销毁 ${amount} ${info.symbol}`);
+      
+      toast.success((t) => (
+        <div>
+           <b>销毁成功!</b>
+           <div style={{fontSize:'0.9rem', marginTop:5}}>
+             -{amount} {info.symbol} <br/>
+             <span style={{fontSize:'0.8rem', color:'#888'}}>供应量已减少</span>
+           </div>
+        </div>
+      ), { id: toastId });
+
       setAmount('');
-      handleQueryBalance();
+      handleQueryBalance(); // 刷新余额
     } catch (err) {
-      alert('销毁失败: ' + (err.message || err));
+      toast.error('销毁失败: ' + (err.message || err), { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
+  // --- UI 部分 ---
+
   return (
     <div className="container">
-      <h2>🪙 MockToken 管理</h2>
+      <h2 style={{display:'flex', alignItems:'center', gap:10}}><Coins size={24} color="#FFD700"/> MockToken 管理</h2>
       <p style={{color: '#888', marginBottom: '20px'}}>
-        铸造和销毁测试代币用于 AMM 交易。
+        管理测试代币的铸造 (Mint) 与销毁 (Burn)，仅适用于实现了 owner 权限的测试币。
       </p>
       
-      <div className="input-group">
-        <label>Token 地址</label>
-        <select value={tokenAddr} onChange={e => setTokenAddr(e.target.value)} style={{marginBottom: '10px'}}>
-          {TOKEN_LIST.map(token => (
-            <option key={token.address} value={token.address}>
-              {token.symbol} - {token.address.slice(0,6)}...{token.address.slice(-4)}
-            </option>
-          ))}
-        </select>
-        <input 
-          placeholder="或输入自定义地址 0x..." 
-          value={tokenAddr} 
-          onChange={e => setTokenAddr(e.target.value)}
-        />
+      {/* 1. 地址选择与查询 */}
+      <div className="data-card" style={{borderLeft: '4px solid #646cff'}}>
+        <div className="input-group">
+          <label>Token 地址</label>
+          <select value={tokenAddr} onChange={e => setTokenAddr(e.target.value)} style={{marginBottom: '10px', width: '100%'}}>
+            {TOKEN_LIST.map(token => (
+              <option key={token.address} value={token.address}>
+                {token.symbol} - {token.address}
+              </option>
+            ))}
+          </select>
+          <div style={{display:'flex', gap:10}}>
+             <input 
+               placeholder="或输入自定义地址 0x..." 
+               value={tokenAddr} 
+               onChange={e => setTokenAddr(e.target.value)}
+               style={{flex:1}}
+             />
+             <button onClick={handleQueryBalance} disabled={loading} style={{display:'flex', alignItems:'center', gap:5, padding:'0 20px'}}>
+               {loading ? '查询中...' : <><Search size={16}/> 查询</>}
+             </button>
+          </div>
+        </div>
       </div>
 
-      <div className="data-card">
-        <button onClick={handleQueryBalance} disabled={loading} style={{width: '100%', marginBottom: '10px'}}>
-          {loading ? '查询中...' : '查询余额 & 代币信息'}
-        </button>
-        {tokenInfo && (
-          <>
-            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px'}}>
+      {/* 2. 代币详情卡片 */}
+      {tokenInfo && (
+        <div className="data-card fade-in" style={{marginTop: 20}}>
+           <div style={{display: 'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
               <div>
-                <span style={{color: '#888', fontSize: '0.9rem'}}>代币名称</span>
-                <p style={{margin: '5px 0'}}>{tokenInfo.name}</p>
+                 <h3 style={{margin:0, display:'flex', alignItems:'center', gap:8}}>
+                    {tokenInfo.name} <span style={{fontSize:'0.9rem', color:'#888'}}>({tokenInfo.symbol})</span>
+                 </h3>
+                 <div style={{marginTop:10, fontSize:'0.9rem', color:'#aaa'}}>
+                    <div>Total Supply: {ethers.formatUnits(tokenInfo.totalSupply, tokenInfo.decimals)}</div>
+                    <div>Owner: {tokenOwner ? `${tokenOwner.slice(0,6)}...${tokenOwner.slice(-4)}` : '无 / 未知'}</div>
+                 </div>
               </div>
-              <div>
-                <span style={{color: '#888', fontSize: '0.9rem'}}>符号</span>
-                <p style={{margin: '5px 0'}}>{tokenInfo.symbol}</p>
+              <div style={{textAlign:'right'}}>
+                 <div style={{fontSize:'0.8rem', color:'#aaa'}}>当前余额</div>
+                 <div style={{fontSize:'1.8rem', fontWeight:'bold', color:'#646cff'}}>
+                    {parseFloat(balance).toLocaleString()} <span style={{fontSize:'1rem'}}>{tokenInfo.symbol}</span>
+                 </div>
               </div>
-            </div>
-            <div style={{marginTop: '10px'}}>
-              <span style={{color: '#888', fontSize: '0.9rem'}}>您的余额</span>
-              <p style={{margin: '5px 0', fontSize: '1.3rem', color: '#646cff'}}>{balance} {tokenInfo.symbol}</p>
-            </div>
-            <div style={{marginTop: '10px'}}>
-              <span style={{color: '#888', fontSize: '0.9rem'}}>总供应量</span>
-              <p style={{margin: '5px 0'}}>{ethers.formatUnits(tokenInfo.totalSupply, tokenInfo.decimals)} {tokenInfo.symbol}</p>
-            </div>
-            {tokenOwner && (
-              <div style={{marginTop: '10px'}}>
-                <span style={{color: '#888', fontSize: '0.9rem'}}>合约 Owner</span>
-                <p style={{margin: '5px 0', fontSize: '0.9rem', fontFamily: 'monospace'}}>
-                  {tokenOwner}
-                  <br />
-                  <span style={{fontSize: '0.8rem', color: isOwner ? '#4ade80' : '#e63946'}}>
-                    {isOwner ? 
-                      '✅ 您是 owner，可以铸造代币' : 
-                      '❌ 您不是 owner，无法铸造代币'
-                    }
-                  </span>
-                </p>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      {isOwner && (
-        <>
-          <h3 style={{marginTop: '20px'}}>铸造 (Mint)</h3>
-          <div className="input-group">
-            <label>目标地址</label>
-            <input 
-              placeholder="0x..." 
-              value={toAddr} 
-              onChange={e => setToAddr(e.target.value)}
-            />
-            <button 
-              onClick={() => setToAddr(window.ethereum?.selectedAddress || '')}
-              style={{marginTop: '5px', padding: '5px 10px', fontSize: '12px'}}
-            >
-              使用当前连接的地址
-            </button>
-          </div>
-
-          <div className="input-group">
-            <label>铸造数量</label>
-            <input 
-              type="number" 
-              placeholder="0.0" 
-              value={amount} 
-              onChange={e => setAmount(e.target.value)}
-            />
-          </div>
-
-          <button className="action-btn" onClick={handleMint} disabled={loading} style={{marginBottom: '10px'}}>
-            {loading ? '处理中...' : '铸造代币'}
-          </button>
-        </>
-      )}
-
-      {!isOwner && tokenOwner && (
-        <div className="data-card" style={{marginTop: '20px', backgroundColor: '#2a1810', border: '1px solid #f59e0b'}}>
-          <h4 style={{color: '#f59e0b', marginTop: 0}}>🔒 铸造权限受限</h4>
-          <p style={{margin: '10px 0 0 0', fontSize: '14px', color: '#f59e0b'}}>
-            只有代币合约的 owner 才能铸造新代币。<br/>
-            当前 owner: <code style={{background: '#000', padding: '2px 4px', borderRadius: '2px'}}>{tokenOwner.slice(0,6)}...{tokenOwner.slice(-4)}</code><br/>
-            您可以：<br/>
-            • 联系 owner 为您铸造代币<br/>
-            • 在"部署"页面创建您自己的代币合约
-          </p>
+           </div>
+           
+           {/* 权限状态条 */}
+           <div style={{marginTop:15, padding:'8px 12px', background: isOwner ? 'rgba(74, 222, 128, 0.1)' : 'rgba(239, 68, 68, 0.1)', borderRadius:6, display:'flex', alignItems:'center', gap:8}}>
+              {isOwner ? <CheckCircle size={16} color="#4ade80"/> : <XCircle size={16} color="#ef4444"/>}
+              <span style={{fontSize:'0.9rem', color: isOwner ? '#4ade80' : '#ef4444'}}>
+                 {isOwner ? '验证通过: 您是该合约的 Owner，拥有铸造权限' : '权限受限: 您不是 Owner，无法执行铸造操作'}
+              </span>
+           </div>
         </div>
       )}
 
-      <h3 style={{marginTop: '20px'}}>销毁 (Burn)</h3>
-      <div className="input-group">
-        <label>销毁数量</label>
-        <input 
-          type="number" 
-          placeholder="0.0" 
-          value={amount} 
-          onChange={e => setAmount(e.target.value)}
-        />
-        <small style={{color: '#888', marginTop: '5px', display: 'block'}}>
-          销毁的代币将从您的钱包余额中扣除
-        </small>
-      </div>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginTop:20}}>
+        
+        {/* 3. 铸造区域 (仅 Owner) */}
+        {isOwner ? (
+          <div className="data-card" style={{border: '1px solid #4ade80'}}>
+             <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8, color:'#4ade80'}}>
+                <Wallet size={18}/> 铸造 (Mint)
+             </h4>
+             
+             <div className="input-group">
+                <label>目标地址 (To)</label>
+                <div style={{display:'flex', gap:5}}>
+                  <input 
+                    placeholder="0x..." 
+                    value={toAddr} 
+                    onChange={e => setToAddr(e.target.value)}
+                  />
+                  <button 
+                    onClick={() => setToAddr(window.ethereum?.selectedAddress || '')}
+                    style={{padding:'0 10px', fontSize:'0.8rem', whiteSpace:'nowrap'}}
+                    title="填入自己"
+                  >
+                    <User size={16}/>
+                  </button>
+                </div>
+             </div>
 
-      <button 
-        className="action-btn" 
-        style={{backgroundColor: '#e63946'}} 
-        onClick={handleBurn} 
-        disabled={loading}
-      >
-        {loading ? '处理中...' : '销毁代币'}
-      </button>
-      
-      <div className="data-card" style={{marginTop: '20px'}}>
-        <h4>💡 使用提示</h4>
-        <ul style={{textAlign: 'left', paddingLeft: '20px', color: '#888', fontSize: '14px'}}>
-          <li>销毁功能会销毁您钱包中的代币</li>
-          <li>销毁的代币不可恢复，请谨慎操作</li>
-          {isOwner ? (
-            <>
-              <li style={{color: '#4ade80'}}>✅ 您是该代币的 owner，可以铸造新代币</li>
-              <li>铸造的代币可用于测试 AMM 交易功能</li>
-              <li>建议先铸造一些代币到自己地址用于测试</li>
-            </>
-          ) : (
-            <>
-              <li style={{color: '#e63946'}}>❌ 您不是该代币的 owner，无法铸造代币</li>
-              <li><strong>获取测试代币的方法：</strong></li>
-              <li style={{marginLeft: '20px'}}>→ 在"部署"页面创建属于您的代币合约</li>
-              <li style={{marginLeft: '20px'}}>→ 联系当前代币的 owner 为您铸造代币</li>
-              <li style={{marginLeft: '20px'}}>→ 选择其他您有权限的代币地址</li>
-            </>
-          )}
-        </ul>
+             <div className="input-group">
+                <label>数量 (Amount)</label>
+                <input 
+                  type="number" 
+                  placeholder="0.0" 
+                  value={amount} 
+                  onChange={e => setAmount(e.target.value)}
+                />
+             </div>
+
+             <button className="action-btn" onClick={handleMint} disabled={loading} style={{background: '#2e7d32'}}>
+                {loading ? '铸造中...' : '确认铸造'}
+             </button>
+          </div>
+        ) : (
+          <div className="data-card" style={{opacity: 0.6, pointerEvents: tokenInfo ? 'auto' : 'none'}}>
+             <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8, color:'#888'}}>
+                <Wallet size={18}/> 铸造 (Mint)
+             </h4>
+             <div style={{height:'150px', display:'flex', alignItems:'center', justifyContent:'center', color:'#666', fontSize:'0.9rem', textAlign:'center'}}>
+                {tokenInfo ? '需要 Owner 权限' : '请先查询代币'}
+             </div>
+          </div>
+        )}
+
+        {/* 4. 销毁区域 (任何人) */}
+        <div className="data-card" style={{border: '1px solid #e63946'}}>
+           <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8, color:'#e63946'}}>
+              <Flame size={18}/> 销毁 (Burn)
+           </h4>
+           
+           <div className="input-group">
+              <label>销毁数量</label>
+              <input 
+                type="number" 
+                placeholder="0.0" 
+                value={amount} 
+                onChange={e => setAmount(e.target.value)}
+              />
+              <small style={{color:'#888', marginTop:5, display:'block'}}>
+                 🔥 警告: 代币将被永久移除
+              </small>
+           </div>
+           
+           <div style={{marginTop:'auto'}}>
+             <button 
+               className="action-btn" 
+               style={{backgroundColor: '#b91c1c', marginTop: 25}} 
+               onClick={handleBurn} 
+               disabled={loading || !tokenInfo}
+             >
+               {loading ? '销毁中...' : '确认销毁'}
+             </button>
+           </div>
+        </div>
       </div>
+      
+      {/* 底部提示 */}
+      {!isOwner && tokenOwner && (
+        <div style={{marginTop: 20, padding: 15, background: '#2a1810', border: '1px solid #f59e0b', borderRadius: 8, fontSize: '0.9rem', color: '#f59e0b', display:'flex', gap: 10}}>
+           <AlertTriangle size={20} style={{flexShrink:0}}/>
+           <div>
+              <b>无法铸造?</b><br/>
+              当前代币 Owner 为 <code style={{color:'#fff'}}>{tokenOwner.slice(0,6)}...</code>。
+              如果这是测试币，请联系部署者；或者在"部署"页面发行您自己的 Token。
+           </div>
+        </div>
+      )}
     </div>
   );
 };
