@@ -9,17 +9,24 @@ import { TOKENS } from './tokens';
 
 // 常用代币地址配置
 export const COMMON_TOKENS = {
-  WETH: TOKENS.ETH.address,  // 使用ETH作为WETH
+  WETH: TOKENS.WETH.address,
   USDC: TOKENS.USDC.address,
   USDT: TOKENS.USDT.address,
   DAI: TOKENS.DAI.address,
   WBTC: TOKENS.WBTC.address,
-  BTC: TOKENS.BTC.address,
   UNI: TOKENS.UNI.address
 };
 
 // 常见的费率设置
 export const COMMON_FEES = [500, 3000, 10000]; // 0.05%, 0.3%, 1%
+
+// 支持的区块链网络配置
+export const COMMON_CHAINS = [
+  { id: 11155111, name: 'Sepolia Ethereum', label: 'Sepolia', isTestnet: true },
+  { id: 1, name: 'Ethereum', label: 'Mainnet', isTestnet: false },
+  { id: 10, name: 'Optimism', label: 'Optimism', isTestnet: false },
+  { id: 42161, name: 'Arbitrum One', label: 'Arbitrum', isTestnet: false }
+];
 
 /**
  * 路由路径结构
