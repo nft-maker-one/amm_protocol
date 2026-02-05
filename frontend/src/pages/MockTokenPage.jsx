@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast'; // 1. 引入 Toast
 import { 
@@ -8,13 +8,14 @@ import {
   User, 
   Wallet, 
   AlertCircle, 
+  AlertTriangle,
   ArrowRight,
   CheckCircle,
   XCircle,
   Copy
 } from 'lucide-react'; // 2. 引入图标
 
-import { TOKEN_LIST } from '../api/tokens';
+import { getTokenList } from '../api/tokens';
 import {
   ensureSepolia,
   getTokenBalance,
@@ -25,9 +26,11 @@ import {
 import ERC20ABI from '../api/abi/ERC20.json';
 
 const MockTokenPage = () => {
-  const [tokenAddr, setTokenAddr] = useState(TOKEN_LIST[0]?.address || '');
+  const [tokenList, setTokenList] = useState(getTokenList());
+  const [tokenAddr, setTokenAddr] = useState(tokenList[0]?.address || '');
   const [toAddr, setToAddr] = useState('');
-  const [amount, setAmount] = useState('');
+  const [mintAmount, setMintAmount] = useState('');
+  const [burnAmount, setBurnAmount] = useState('');
   const [balance, setBalance] = useState(null);
   const [tokenInfo, setTokenInfo] = useState(null);
   const [tokenOwner, setTokenOwner] = useState(null);
@@ -35,6 +38,59 @@ const MockTokenPage = () => {
   const [loading, setLoading] = useState(false);
 
   // --- 逻辑部分 (保留队友原始逻辑) ---
+
+  // 当 token 列表更新时，刷新页面数据
+  useEffect(() => {
+    const updatedList = getTokenList();
+    setTokenList(updatedList);
+    // 如果当前选中的地址不在列表中了，切换到第一个
+    if (!updatedList.find(t => t.address.toLowerCase() === tokenAddr.toLowerCase())) {
+      setTokenAddr(updatedList[0]?.address || '');
+    }
+  }, []);
+
+  // 当 tokenAddr 改变时，自动查询 Owner 和合约信息
+  useEffect(() => {
+    if (!tokenAddr || !ethers.isAddress(tokenAddr) || !window.ethereum) return;
+
+    const autoQuery = async () => {
+      try {
+        setLoading(true);
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        await ensureSepolia(provider);
+        const signer = await provider.getSigner();
+        const userAddr = await signer.getAddress();
+        
+        const bal = await getTokenBalance(provider, tokenAddr, userAddr);
+        const info = await getTokenInfo(provider, tokenAddr);
+        
+        // Try to get token owner
+        let owner = null;
+        let currentUserIsOwner = false;
+        try {
+          const token = new ethers.Contract(tokenAddr, ERC20ABI, provider);
+          owner = await token.owner();
+          setTokenOwner(owner);
+          currentUserIsOwner = owner.toLowerCase() === userAddr.toLowerCase();
+          setIsOwner(currentUserIsOwner);
+        } catch (err) {
+          console.warn("此代币可能没有 owner() 方法或调用失败", err);
+          setTokenOwner(null);
+          setIsOwner(false);
+        }
+        
+        setBalance(ethers.formatUnits(bal, info.decimals));
+        setTokenInfo(info);
+      } catch (err) {
+        console.warn('自动查询失败:', err);
+        // 静默失败，不显示错误提示
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    autoQuery();
+  }, [tokenAddr]);
 
   const handleQueryBalance = async () => {
     if (!window.ethereum) return toast.error('请先连接钱包');
@@ -84,7 +140,7 @@ const MockTokenPage = () => {
     if (!window.ethereum) return toast.error('请先连接钱包');
     if (!ethers.isAddress(tokenAddr)) return toast.error('Token 地址无效');
     if (!toAddr || !ethers.isAddress(toAddr)) return toast.error('目标地址无效');
-    if (!amount || Number(amount) <= 0) return toast.error('数量必须大于 0');
+    if (!mintAmount || Number(mintAmount) <= 0) return toast.error('数量必须大于 0');
     
     const toastId = toast.loading('正在铸造代币...');
     try {
@@ -94,7 +150,7 @@ const MockTokenPage = () => {
       const signer = await provider.getSigner();
       
       const info = await getTokenInfo(provider, tokenAddr);
-      const amountWei = ethers.parseUnits(amount, info.decimals);
+      const amountWei = ethers.parseUnits(mintAmount, info.decimals);
       
       await mintToken(provider, signer, tokenAddr, toAddr, amountWei);
       
@@ -102,13 +158,13 @@ const MockTokenPage = () => {
         <div>
            <b>铸造成功!</b>
            <div style={{fontSize:'0.9rem', marginTop:5}}>
-             +{amount} {info.symbol} <br/>
+             +{mintAmount} {info.symbol} <br/>
              To: {toAddr.slice(0,6)}...{toAddr.slice(-4)}
            </div>
         </div>
       ), { id: toastId });
 
-      setAmount('');
+      setMintAmount('');
       // 这里不自动清空 toAddr，方便用户连续操作
       // setToAddr(''); 
       handleQueryBalance(); // 刷新余额
@@ -122,7 +178,7 @@ const MockTokenPage = () => {
   const handleBurn = async () => {
     if (!window.ethereum) return toast.error('请先连接钱包');
     if (!ethers.isAddress(tokenAddr)) return toast.error('Token 地址无效');
-    if (!amount || Number(amount) <= 0) return toast.error('数量必须大于 0');
+    if (!burnAmount || Number(burnAmount) <= 0) return toast.error('数量必须大于 0');
     
     const toastId = toast.loading('正在销毁代币...');
     try {
@@ -132,7 +188,7 @@ const MockTokenPage = () => {
       const signer = await provider.getSigner();
       
       const info = await getTokenInfo(provider, tokenAddr);
-      const amountWei = ethers.parseUnits(amount, info.decimals);
+      const amountWei = ethers.parseUnits(burnAmount, info.decimals);
       
       await burnToken(provider, signer, tokenAddr, amountWei);
       
@@ -140,13 +196,13 @@ const MockTokenPage = () => {
         <div>
            <b>销毁成功!</b>
            <div style={{fontSize:'0.9rem', marginTop:5}}>
-             -{amount} {info.symbol} <br/>
+             -{burnAmount} {info.symbol} <br/>
              <span style={{fontSize:'0.8rem', color:'#888'}}>供应量已减少</span>
            </div>
         </div>
       ), { id: toastId });
 
-      setAmount('');
+      setBurnAmount('');
       handleQueryBalance(); // 刷新余额
     } catch (err) {
       toast.error('销毁失败: ' + (err.message || err), { id: toastId });
@@ -167,25 +223,43 @@ const MockTokenPage = () => {
       {/* 1. 地址选择与查询 */}
       <div className="data-card" style={{borderLeft: '4px solid #646cff'}}>
         <div className="input-group">
-          <label>Token 地址</label>
-          <select value={tokenAddr} onChange={e => setTokenAddr(e.target.value)} style={{marginBottom: '10px', width: '100%'}}>
-            {TOKEN_LIST.map(token => (
+          <label>选择代币</label>
+          <select 
+            value={tokenAddr} 
+            onChange={(e) => setTokenAddr(e.target.value)}
+            style={{marginBottom: '15px', width: '100%', padding: '10px', fontSize: '1rem'}}
+          >
+            {tokenList.map(token => (
               <option key={token.address} value={token.address}>
-                {token.symbol} - {token.address}
+                {token.symbol} {token.isCustom ? '(Custom)' : ''}
               </option>
             ))}
           </select>
-          <div style={{display:'flex', gap:10}}>
-             <input 
-               placeholder="或输入自定义地址 0x..." 
-               value={tokenAddr} 
-               onChange={e => setTokenAddr(e.target.value)}
-               style={{flex:1}}
-             />
-             <button onClick={handleQueryBalance} disabled={loading} style={{display:'flex', alignItems:'center', gap:5, padding:'0 20px'}}>
-               {loading ? '查询中...' : <><Search size={16}/> 查询</>}
-             </button>
-          </div>
+          
+          {/* Token 地址显示（只读）*/}
+          {tokenAddr && (
+            <div style={{display:'flex', alignItems:'center', gap:10, padding:'12px', background:'#f5f5f5', borderRadius:'6px', marginBottom:'10px'}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:'0.85rem', color:'#666', marginBottom:'4px'}}>代币地址</div>
+                <div style={{fontFamily:'monospace', fontSize:'0.9rem', wordBreak:'break-all', color:'#333'}}>
+                  {tokenAddr}
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(tokenAddr);
+                  toast.success('已复制到剪贴板');
+                }}
+                style={{padding:'8px 12px', background:'#e0e0e0', border:'none', borderRadius:'4px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px'}}
+              >
+                <Copy size={16}/> 复制
+              </button>
+            </div>
+          )}
+          
+          <button onClick={handleQueryBalance} disabled={loading} style={{width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:5, padding:'10px 20px'}}>
+            {loading ? '查询中...' : <><Search size={16}/> 查询合约详情</>}
+          </button>
         </div>
       </div>
 
@@ -252,8 +326,8 @@ const MockTokenPage = () => {
                 <input 
                   type="number" 
                   placeholder="0.0" 
-                  value={amount} 
-                  onChange={e => setAmount(e.target.value)}
+                  value={mintAmount} 
+                  onChange={e => setMintAmount(e.target.value)}
                 />
              </div>
 
@@ -283,8 +357,8 @@ const MockTokenPage = () => {
               <input 
                 type="number" 
                 placeholder="0.0" 
-                value={amount} 
-                onChange={e => setAmount(e.target.value)}
+                value={burnAmount} 
+                onChange={e => setBurnAmount(e.target.value)}
               />
               <small style={{color:'#888', marginTop:5, display:'block'}}>
                  🔥 警告: 代币将被永久移除

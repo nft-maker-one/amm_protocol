@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast'; // 1. 引入 Toast
 import { 
@@ -9,13 +9,16 @@ import {
   CheckCircle, 
   Terminal, 
   Info,
-  Copy
+  Copy,
+  Eye,
+  Trash2,
+  X
 } from 'lucide-react'; // 2. 引入图标
 
 // 3. 引入 API (如果有本地 Mock 需求请自行替换)
 import { getPoolList, getSelectedPool, setSelectedPool, updatePoolInList, addPoolToList } from '../api/pools';
 import PoolSelector from '../components/ui/PoolSelector';
-import { TOKEN_LIST, findTokenByAddress } from '../api/tokens';
+import { TOKEN_LIST, findTokenByAddress, addCustomToken, getTokenList, removeCustomToken, getCustomTokens } from '../api/tokens';
 import {
   ensureSepolia,
   deployFactory,
@@ -26,11 +29,16 @@ import {
   createPool,
   simulateCreatePool,
 } from '../api/amm';
+import { FACTORY_BYTECODE, TOKEN_BYTECODE, isFactoryBytecodeReady, isTokenBytecodeReady } from '../api/bytecodes';
 
 const DeploymentPage = () => {
   const [activeTab, setActiveTab] = useState('factory'); // 'factory', 'token', 'create-pool', 'pool'
   const [loading, setLoading] = useState(false);
   const [selectedPool, setSelectedPool] = useState(null);
+  
+  // 动态 token 列表
+  const [tokenList, setTokenList] = useState(getTokenList());
+  const [customTokens, setCustomTokens] = useState(getCustomTokens());
   
   // Create pool state
   const [createTokenAChoice, setCreateTokenAChoice] = useState('');
@@ -40,11 +48,12 @@ const DeploymentPage = () => {
   const [createFee, setCreateFee] = useState('3000');
   
   // Factory deployment state
-  const [factoryBytecode, setFactoryBytecode] = useState('');
+  const [factoryBytecode, setFactoryBytecode] = useState(FACTORY_BYTECODE);
   const [deployedFactory, setDeployedFactory] = useState('');
+  const [factoryAddresses, setFactoryAddresses] = useState([]);
   
   // Token deployment state
-  const [tokenBytecode, setTokenBytecode] = useState('');
+  const [tokenBytecode, setTokenBytecode] = useState(TOKEN_BYTECODE);
   const [tokenName, setTokenName] = useState('');
   const [tokenSymbol, setTokenSymbol] = useState('');
   const [tokenDecimals, setTokenDecimals] = useState('18');
@@ -54,9 +63,13 @@ const DeploymentPage = () => {
   // Pool initialization state
   const [poolAddress, setPoolAddress] = useState('');
   const [poolPrice, setPoolPrice] = useState('1'); 
-  const [poolSqrtPriceX96, setPoolSqrtPriceX96] = useState('79228162514264337593543950336'); 
+  const [poolSqrtPriceX96, setPoolSqrtPriceX96] = useState('79228162514264337593543950336');
 
-  // --- 1. 部署 Factory ---
+  // 已有交易对展示模态框
+  const [isPoolModalOpen, setIsPoolModalOpen] = useState(false);
+  const [poolList, setPoolList] = useState(getPoolList());
+
+  // --- 1. 部署 Factory (改成只读展示) ---
   const handleDeployFactory = async () => {
     if (!window.ethereum) return toast.error('请先连接钱包');
     if (!factoryBytecode || factoryBytecode.trim() === '') {
@@ -73,6 +86,9 @@ const DeploymentPage = () => {
       const result = await deployFactory(provider, signer, factoryBytecode);
       setDeployedFactory(result.address);
       
+      // 保存 Factory 地址到列表
+      setFactoryAddresses([...factoryAddresses, result.address]);
+      
       toast.success((t) => (
         <span>
           <b>Factory 部署成功!</b><br/>
@@ -87,7 +103,7 @@ const DeploymentPage = () => {
     }
   };
 
-  // --- 2. 部署 Token ---
+  // --- 2. 部署 Token 并动态添加到列表 ---
   const handleDeployToken = async () => {
     if (!window.ethereum) return toast.error('请先连接钱包');
     if (!tokenBytecode || tokenBytecode.trim() === '') return toast.error('请输入Token bytecode');
@@ -111,12 +127,40 @@ const DeploymentPage = () => {
       );
       setDeployedToken(result.address);
       
-      toast.success((t) => (
-        <span>
-          <b>Token 部署成功!</b><br/>
-          地址: {result.address.substring(0,8)}...
-        </span>
-      ), { id: toastId });
+      // 自动添加到 token 列表中
+      const newToken = {
+        symbol: tokenSymbol,
+        address: result.address,
+        decimalsHint: Number(tokenDecimals),
+        isCustom: true,
+      };
+      
+      const success = addCustomToken(newToken);
+      if (success) {
+        // 更新本地列表
+        setTokenList(getTokenList());
+        setCustomTokens(getCustomTokens());
+        toast.success((t) => (
+          <span>
+            <b>Token 部署成功!</b><br/>
+            地址: {result.address.substring(0,8)}...<br/>
+            <span style={{fontSize:'0.85rem', color:'#4ade80'}}>✓ 已添加到列表</span>
+          </span>
+        ), { id: toastId });
+      } else {
+        toast.success((t) => (
+          <span>
+            <b>Token 部署成功!</b><br/>
+            地址: {result.address.substring(0,8)}...
+          </span>
+        ), { id: toastId });
+      }
+      
+      // 清空表单
+      setTokenName('');
+      setTokenSymbol('');
+      setDeployedToken('');
+      
     } catch (err) {
       toast.error('部署失败: ' + err.message, { id: toastId });
     } finally {
@@ -181,7 +225,6 @@ const DeploymentPage = () => {
       
       if (addPoolToList) addPoolToList(poolInfo);
       setSelectedPool(poolInfo);
-      setPoolAddress(newPool);
       
       toast.success('Pool 创建成功! 即将跳转初始化...', { id: toastId });
       setTimeout(() => setActiveTab('pool'), 1500); // 自动跳转
@@ -208,7 +251,7 @@ const DeploymentPage = () => {
 
   const handleInitializePool = async () => {
     if (!window.ethereum) return toast.error('请先连接钱包');
-    if (!poolAddress || !ethers.isAddress(poolAddress)) return toast.error('无效 Pool 地址');
+    if (!selectedPool || !ethers.isAddress(selectedPool.address)) return toast.error('请先选择一个有效的池子');
     
     const toastId = toast.loading('正在初始化价格...');
     try {
@@ -218,7 +261,7 @@ const DeploymentPage = () => {
       const signer = await provider.getSigner();
       
       const sqrtPrice = BigInt(poolSqrtPriceX96);
-      await initializePool(provider, signer, poolAddress, sqrtPrice);
+      await initializePool(provider, signer, selectedPool.address, sqrtPrice);
       
       // 更新列表状态
       if (selectedPool && updatePoolInList) {
@@ -282,107 +325,212 @@ const DeploymentPage = () => {
         <TabButton id="pool" label="4. Initialize" icon={PlayCircle} />
       </div>
 
-      {/* --- Tab 1: Factory --- */}
+      {/* --- Tab 1: Factory (只读显示) --- */}
       {activeTab === 'factory' && (
         <div className="fade-in">
           <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a1a1a', borderLeft: '4px solid #646cff'}}>
-            <h4 style={{marginTop: 0, display:'flex', alignItems:'center', gap:5}}><Terminal size={16}/> 获取 Bytecode 指南</h4>
-            <ol style={{textAlign: 'left', paddingLeft: '20px', color: '#aaa', fontSize: '0.9rem', margin:0}}>
-              <li>运行 <code style={{background: '#000', padding: '2px 4px'}}>forge build</code></li>
-              <li>打开 <code style={{background: '#000', padding: '2px 4px'}}>out/AMMFactory.sol/AMMFactory.json</code></li>
-              <li>复制 <code style={{background: '#000', padding: '2px 4px'}}>bytecode.object</code> (以 0x 开头)</li>
-            </ol>
-          </div>
-
-          <div className="input-group">
-            <label>Factory Bytecode</label>
-            <textarea 
-              placeholder="0x608060405234801561001057600080fd5b50..."
-              value={factoryBytecode}
-              onChange={e => setFactoryBytecode(e.target.value)}
-              style={{
-                width: '100%', minHeight: '120px', fontFamily: 'monospace',
-                fontSize: '12px', padding: '10px', background: '#111',
-                color: '#fff', border: '1px solid #333', borderRadius: '4px'
-              }}
-            />
-          </div>
-
-          {deployedFactory && (
-            <div className="data-card" style={{backgroundColor: '#1a3a1a', display:'flex', alignItems:'center', gap:10}}>
-              <CheckCircle color="#4ade80" size={20}/>
-              <div>
-                 <div style={{color:'#aaa', fontSize:'0.8rem'}}>Factory Deployed at:</div>
-                 <code style={{color: '#4ade80', fontSize:'1rem'}}>{deployedFactory}</code>
-              </div>
-            </div>
-          )}
-
-          <button className="action-btn" onClick={handleDeployFactory} disabled={loading}>
-            {loading ? '部署中...' : '部署 Factory 合约'}
-          </button>
-        </div>
-      )}
-
-      {/* --- Tab 2: Token --- */}
-      {activeTab === 'token' && (
-        <div className="fade-in">
-           <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a1a1a', borderLeft: '4px solid #646cff'}}>
-            <h4 style={{marginTop: 0, display:'flex', alignItems:'center', gap:5}}><Terminal size={16}/> 获取 Token Bytecode 指南</h4>
+            <h4 style={{marginTop: 0, display:'flex', alignItems:'center', gap:5}}><Terminal size={16}/> Factory 合约信息</h4>
             <p style={{color: '#aaa', fontSize: '0.9rem', margin:0}}>
-               请复制 <code style={{background: '#000', padding: '2px 4px'}}>out/MockToken.sol/MockToken.json</code> 中的 bytecode。
+              一个 AMM 系统通常只需要一个 Factory。下方展示的是本次会话部署的 Factory 实例。
             </p>
           </div>
 
-          <div className="input-group">
-            <label>Token Bytecode</label>
-            <textarea 
-              placeholder="0x..."
-              value={tokenBytecode}
-              onChange={e => setTokenBytecode(e.target.value)}
-              style={{
-                width: '100%', minHeight: '80px', fontFamily: 'monospace',
-                fontSize: '12px', padding: '10px', background: '#111',
-                color: '#fff', border: '1px solid #333', borderRadius: '4px'
-              }}
-            />
-          </div>
-
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:15}}>
-             <div className="input-group">
-                <label>Name</label>
-                <input type="text" placeholder="Token A" value={tokenName} onChange={e => setTokenName(e.target.value)} />
-             </div>
-             <div className="input-group">
-                <label>Symbol</label>
-                <input type="text" placeholder="TKNA" value={tokenSymbol} onChange={e => setTokenSymbol(e.target.value)} />
-             </div>
-          </div>
-          
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:15}}>
-             <div className="input-group">
-                <label>Decimals</label>
-                <input type="number" placeholder="18" value={tokenDecimals} onChange={e => setTokenDecimals(e.target.value)} />
-             </div>
-             <div className="input-group">
-                <label>Initial Supply</label>
-                <input type="text" placeholder="1000000" value={tokenInitialSupply} onChange={e => setTokenInitialSupply(e.target.value)} />
-             </div>
-          </div>
-
-          {deployedToken && (
-            <div className="data-card" style={{backgroundColor: '#1a3a1a', display:'flex', alignItems:'center', gap:10}}>
-              <CheckCircle color="#4ade80" size={20}/>
+          <div className="data-card" style={{backgroundColor: '#1a2a1a', borderLeft: '4px solid #4ade80'}}>
+            <h4 style={{marginTop: 0, color:'#4ade80', display:'flex', alignItems:'center', gap:8}}>
+              <Eye size={16}/> Factory 部署历史
+            </h4>
+            {factoryAddresses.length === 0 ? (
+              <p style={{color:'#888', margin:0}}>本会话未部署任何 Factory。部署 Factory 后会显示在此。</p>
+            ) : (
               <div>
-                 <div style={{color:'#aaa', fontSize:'0.8rem'}}>Token Deployed at:</div>
-                 <code style={{color: '#4ade80', fontSize:'1rem'}}>{deployedToken}</code>
+                {factoryAddresses.map((addr, idx) => (
+                  <div key={idx} style={{
+                    padding: '10px',
+                    marginBottom: '8px',
+                    backgroundColor: '#111',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <div style={{fontSize:'0.85rem', color:'#aaa'}}>Factory #{idx + 1}</div>
+                      <code style={{color:'#4ade80', fontSize:'0.9rem', wordBreak:'break-all'}}>{addr}</code>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(addr);
+                        toast.success('已复制');
+                      }}
+                      style={{padding:'6px 12px', background:'#333', border:'none', borderRadius:'4px', cursor:'pointer'}}
+                    >
+                      <Copy size={14}/>
+                    </button>
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          <button className="action-btn" onClick={handleDeployToken} disabled={loading}>
-            {loading ? '部署中...' : '部署 Token 合约'}
-          </button>
+          {/* Factory 部分（只读） */}
+          <div style={{marginTop: '20px', padding: '15px', backgroundColor: '#1a2a1a', borderRadius: '8px', borderLeft: '4px solid #f59e0b', opacity: 0.8}}>
+            <h4 style={{marginTop: 0, display:'flex', alignItems:'center', gap:5, color:'#f59e0b'}}>ℹ️ Factory 信息（只读）</h4>
+            <p style={{color: '#aaa', fontSize: '0.9rem', margin:'10px 0 15px 0'}}>
+              Factory 合约是 AMM 系统的核心，通常由管理员部署并维护。此部分为只读状态。
+            </p>
+            
+            <div className="input-group">
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10}}>
+                <label>Factory Bytecode</label>
+                {isFactoryBytecodeReady() && (
+                  <span style={{fontSize: '0.8rem', color: '#4ade80'}}>✓ 已预配置</span>
+                )}
+              </div>
+              <textarea 
+                placeholder="0x608060405234801561001057600080fd5b50..."
+                value={factoryBytecode}
+                disabled={true}
+                style={{
+                  width: '100%', minHeight: '100px', fontFamily: 'monospace',
+                  fontSize: '12px', padding: '10px', background: '#111',
+                  color: '#999', border: '1px solid #444', borderRadius: '4px',
+                  cursor: 'not-allowed', opacity: 0.7
+                }}
+              />
+              <p style={{color: '#f59e0b', fontSize: '0.85rem', marginTop: 8}}>
+                🔒 Factory Bytecode 为只读状态，无法修改。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- Tab 2: Token (展示列表 + 部署功能) --- */}
+      {activeTab === 'token' && (
+        <div className="fade-in">
+          {/* Token 列表卡片 */}
+          <div className="data-card" style={{marginBottom: '20px', backgroundColor: '#1a2a1a', borderLeft: '4px solid #4ade80'}}>
+            <h4 style={{marginTop: 0, color:'#4ade80', display:'flex', alignItems:'center', gap:8}}>
+              <Eye size={16}/> 已有的 Token ({tokenList.length})
+            </h4>
+            <div style={{maxHeight: '300px', overflowY: 'auto'}}>
+              {tokenList.map((token) => (
+                <div key={token.address} style={{
+                  padding: '12px',
+                  marginBottom: '8px',
+                  backgroundColor: token.isCustom ? '#2a1a1a' : '#111',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderLeft: token.isCustom ? '3px solid #fb923c' : '3px solid #646cff'
+                }}>
+                  <div style={{flex: 1}}>
+                    <div style={{display:'flex', alignItems:'center', gap:8}}>
+                      <span style={{fontWeight:'bold', color:'#fff'}}>{token.symbol}</span>
+                      {token.isCustom && <span style={{fontSize:'0.75rem', color:'#fb923c', background:'rgba(251,146,60,0.2)', padding:'2px 6px', borderRadius:'2px'}}>Custom</span>}
+                    </div>
+                    <code style={{fontSize:'0.8rem', color:'#888', wordBreak:'break-all'}}>{token.address}</code>
+                    <div style={{fontSize:'0.75rem', color:'#666', marginTop:'4px'}}>Decimals: {token.decimalsHint}</div>
+                  </div>
+                  <div style={{display:'flex', gap:'8px'}}>
+                    <button 
+                      onClick={() => {
+                        navigator.clipboard.writeText(token.address);
+                        toast.success('已复制地址');
+                      }}
+                      style={{padding:'6px 10px', background:'#333', border:'none', borderRadius:'4px', cursor:'pointer', color:'#aaa'}}
+                      title="复制地址"
+                    >
+                      <Copy size={14}/>
+                    </button>
+                    {token.isCustom && (
+                      <button 
+                        onClick={() => {
+                          removeCustomToken(token.address);
+                          setTokenList(getTokenList());
+                          setCustomTokens(getCustomTokens());
+                          toast.success('已移除');
+                        }}
+                        style={{padding:'6px 10px', background:'rgba(239,68,68,0.2)', border:'none', borderRadius:'4px', cursor:'pointer', color:'#ef4444'}}
+                        title="移除自定义 Token"
+                      >
+                        <Trash2 size={14}/>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 部署新 Token 表单 */}
+          <div style={{padding: '15px', backgroundColor: '#1a1a1a', borderRadius: '8px', borderLeft: '4px solid #646cff', marginBottom: '20px'}}>
+            <h4 style={{marginTop: 0, display:'flex', alignItems:'center', gap:5}}>📝 部署新的 Token</h4>
+            <p style={{color: '#aaa', fontSize: '0.9rem', margin:'5px 0 15px 0'}}>
+               部署后的 Token 会自动添加到上方列表中，可以在创建交易对时选择使用。
+            </p>
+
+            <div className="input-group">
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10}}>
+                <label>Token Bytecode</label>
+                {isTokenBytecodeReady() && (
+                  <span style={{fontSize: '0.8rem', color: '#4ade80'}}>✓ 已预配置</span>
+                )}
+              </div>
+              <textarea 
+                placeholder="0x..."
+                value={tokenBytecode}
+                onChange={e => setTokenBytecode(e.target.value)}
+                style={{
+                  width: '100%', minHeight: '80px', fontFamily: 'monospace',
+                  fontSize: '12px', padding: '10px', background: '#111',
+                  color: '#fff', border: '1px solid #333', borderRadius: '4px'
+                }}
+              />
+              {!isTokenBytecodeReady() && (
+                <p style={{color: '#f87171', fontSize: '0.85rem', marginTop: 8}}>
+                  ⚠️ Token bytecode 未配置。请将编译后的 bytecode 粘贴到上方。
+                </p>
+              )}
+            </div>
+
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:15}}>
+               <div className="input-group">
+                  <label>Name</label>
+                  <input type="text" placeholder="Token A" value={tokenName} onChange={e => setTokenName(e.target.value)} />
+               </div>
+               <div className="input-group">
+                  <label>Symbol</label>
+                  <input type="text" placeholder="TKNA" value={tokenSymbol} onChange={e => setTokenSymbol(e.target.value)} />
+               </div>
+            </div>
+            
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:15}}>
+               <div className="input-group">
+                  <label>Decimals</label>
+                  <input type="number" placeholder="18" value={tokenDecimals} onChange={e => setTokenDecimals(e.target.value)} />
+               </div>
+               <div className="input-group">
+                  <label>Initial Supply</label>
+                  <input type="text" placeholder="1000000" value={tokenInitialSupply} onChange={e => setTokenInitialSupply(e.target.value)} />
+               </div>
+            </div>
+
+            {deployedToken && (
+              <div className="data-card" style={{backgroundColor: '#1a3a1a', display:'flex', alignItems:'center', gap:10, marginBottom: 15}}>
+                <CheckCircle color="#4ade80" size={20}/>
+                <div>
+                   <div style={{color:'#aaa', fontSize:'0.8rem'}}>刚刚部署的 Token:</div>
+                   <code style={{color: '#4ade80', fontSize:'0.9rem'}}>{deployedToken}</code>
+                </div>
+              </div>
+            )}
+
+            <button className="action-btn" onClick={handleDeployToken} disabled={loading}>
+              {loading ? '部署中...' : '✨ 部署 Token 合约'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -390,17 +538,40 @@ const DeploymentPage = () => {
       {activeTab === 'create-pool' && (
         <div className="fade-in">
           <div className="data-card" style={{marginBottom: 20}}>
-             <h4 style={{margin:0, display:'flex', alignItems:'center', gap:8}}><Info size={16}/> 创建交易对</h4>
-             <p style={{fontSize:'0.9rem', color:'#888', margin:'5px 0 0 0'}}>
-                选择两个代币和费率层级。创建成功后会自动跳转到初始化页面。
-             </p>
+             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+               <div style={{flex:1}}>
+                 <h4 style={{margin:0, display:'flex', alignItems:'center', gap:8}}><Info size={16}/> 创建交易对</h4>
+                 <p style={{fontSize:'0.9rem', color:'#888', margin:'5px 0 0 0'}}>
+                    选择两个代币和费率层级。创建成功后会自动跳转到初始化页面。
+                 </p>
+               </div>
+               <button 
+                 onClick={() => setIsPoolModalOpen(true)}
+                 style={{
+                   padding: '8px 16px',
+                   background: '#333',
+                   border: '1px solid #555',
+                   borderRadius: '4px',
+                   color: '#aaa',
+                   cursor: 'pointer',
+                   fontSize: '0.9rem',
+                   display: 'flex',
+                   alignItems: 'center',
+                   gap: '6px',
+                   whiteSpace: 'nowrap'
+                 }}
+                 title="查看已有的交易对"
+               >
+                 <Eye size={16} /> 查看已有交易对
+               </button>
+             </div>
           </div>
 
           <div className="input-group">
             <label>Token A</label>
             <select value={createTokenAChoice} onChange={e=>setCreateTokenAChoice(e.target.value)} style={{width: '100%', marginBottom: '10px'}}>
               <option value="">-- 选择 Token A --</option>
-              {TOKEN_LIST.map(t => (
+              {tokenList.map(t => (
                 <option key={t.address} value={t.address}>{t.symbol} ({t.address.slice(0,6)}...)</option>
               ))}
               <option value="custom">自定义地址...</option>
@@ -414,7 +585,7 @@ const DeploymentPage = () => {
             <label>Token B</label>
             <select value={createTokenBChoice} onChange={e=>setCreateTokenBChoice(e.target.value)} style={{width: '100%', marginBottom: '10px'}}>
               <option value="">-- 选择 Token B --</option>
-              {TOKEN_LIST.map(t => (
+              {tokenList.map(t => (
                 <option key={t.address} value={t.address}>{t.symbol} ({t.address.slice(0,6)}...)</option>
               ))}
               <option value="custom">自定义地址...</option>
@@ -460,17 +631,6 @@ const DeploymentPage = () => {
           </div>
 
           <div className="input-group">
-            <label>Pool Address</label>
-            <input 
-              placeholder="0x..." 
-              value={poolAddress}
-              onChange={e => setPoolAddress(e.target.value)}
-              disabled={!!selectedPool}
-              style={{backgroundColor: selectedPool ? '#222' : '#111', color: selectedPool ? '#888' : 'white'}}
-            />
-          </div>
-
-          <div className="input-group">
             <label>初始价格比例 (Token0 / Token1)</label>
             <div style={{display: 'flex', gap: '10px'}}>
               <input 
@@ -497,6 +657,100 @@ const DeploymentPage = () => {
           <button className="action-btn" onClick={handleInitializePool} disabled={loading}>
             {loading ? '初始化中...' : 'Initialize Pool'}
           </button>
+        </div>
+      )}
+
+      {/* 已有交易对模态框 */}
+      {isPoolModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#1a1a1a',
+            borderRadius: '12px',
+            border: '1px solid #333',
+            maxWidth: '600px',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            padding: '20px',
+            width: '90%'
+          }}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
+              <h3 style={{margin:0}}>已有的交易对</h3>
+              <button 
+                onClick={() => setIsPoolModalOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#aaa',
+                  cursor: 'pointer',
+                  fontSize: '24px'
+                }}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {poolList.length === 0 ? (
+              <div style={{textAlign:'center', color:'#888', padding:'40px 20px'}}>
+                <p>暂无已创建的交易对</p>
+                <p style={{fontSize:'0.9rem'}}>创建新的交易对后，它会显示在这里。</p>
+              </div>
+            ) : (
+              <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+                {poolList.map((pool, idx) => (
+                  <div key={pool.address} style={{
+                    padding: '15px',
+                    backgroundColor: '#222',
+                    borderRadius: '8px',
+                    borderLeft: '4px solid #646cff'
+                  }}>
+                    <div style={{marginBottom:'8px'}}>
+                      <div style={{fontSize:'0.9rem', fontWeight:'bold', color:'#fff'}}>
+                        #{idx + 1} {pool.token0Meta?.symbol}/{pool.token1Meta?.symbol} (Fee: {pool.fee})
+                      </div>
+                      <div style={{fontSize:'0.75rem', color:'#888', marginTop:'4px'}}>
+                        {pool.isInitialized ? '✅ 已初始化' : '⚠️ 未初始化'}
+                      </div>
+                    </div>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr auto',
+                      gap: '8px',
+                      alignItems: 'center',
+                      fontSize: '0.8rem'
+                    }}>
+                      <span style={{color:'#aaa'}}>地址:</span>
+                      <code style={{color:'#4ade80', wordBreak:'break-all'}}>{pool.address}</code>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(pool.address);
+                          toast.success('已复制');
+                        }}
+                        style={{padding:'4px 8px', background:'#333', border:'none', borderRadius:'4px', cursor:'pointer'}}
+                      >
+                        <Copy size={14}/>
+                      </button>
+                    </div>
+                    {pool.sqrtPriceX96 && (
+                      <div style={{marginTop:'8px', fontSize:'0.8rem', color:'#888'}}>
+                        SqrtPrice: {pool.sqrtPriceX96}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
