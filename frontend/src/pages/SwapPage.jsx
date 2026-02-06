@@ -10,7 +10,6 @@ import {
   AMMPOOL_ADDRESS,
   ensureSepolia,
   getPool,
-  readSlot0,
   getTokenInfo,
   getPoolContract,
   swapExactIn,
@@ -93,48 +92,6 @@ const SwapPage = () => {
 
   const tokenA = tokenAChoice === 'custom' ? tokenACustom : tokenAChoice;
   const tokenB = tokenBChoice === 'custom' ? tokenBCustom : tokenBChoice;
-
-
-  // --- 队友逻辑 3: 读取选中池子的 Slot0 ---
-  const handleReadSlot0 = async () => {
-    if (!selectedPool) return toast.error('请先选择一个池子');
-    if (!window.ethereum) return toast.error('请先连接钱包');
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await ensureSepolia(provider);
-      const decoded = await safeCallView(provider, selectedPool.address, AMMPoolABI, 'slot0');
-      
-      const updatedPool = {
-        ...selectedPool,
-        isInitialized: true,
-        sqrtPriceX96: decoded[0].toString(),
-        currentTick: decoded[1].toString()
-      };
-      
-      updatePoolInList(selectedPool.address, updatedPool);
-      setSelectedPool(updatedPool);
-      
-      toast.success(`Slot0: ${decoded[0]} / ${decoded[1]}`, { duration: 4000 });
-    } catch (err) {
-      toast.error('读取 Slot0 失败: ' + err.message);
-    }
-  };
-  
-  // --- 队友逻辑 4: 查询全局 Slot0 ---
-  const handleQuerySlot0 = async () => {
-    if (!window.ethereum) return toast.error('请先连接钱包');
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await ensureSepolia(provider);
-      const decoded = await safeCallView(provider, AMMPOOL_ADDRESS, AMMPoolABI, 'slot0');
-      toast(`Price: ${decoded[0]}\nTick: ${decoded[1]}`, {
-          icon: 'ℹ️',
-          style: { borderRadius: '10px', background: '#333', color: '#fff' },
-      });
-    } catch (err) {
-      toast.error('查询失败: ' + (err.message || err));
-    }
-  };
 
   // --- Swap 检查 ---
   const handleSwapCheck = async () => {
@@ -405,16 +362,6 @@ const SwapPage = () => {
       <button className="action-btn" onClick={handleSwapCheck} disabled={swapping}>
         {swapping ? '计算中...' : '立即兑换'}
       </button>
-
-      {/* 调试工具栏（已移除查找池子/创建池子功能，仅保留查询 Slot0） */}
-      <div style={{marginTop: 20, borderTop: '1px solid #333', paddingTop: 10}}>
-         <h4 style={{margin: '0 0 10px 0', color: '#666'}}>开发调试工具</h4>
-         <div style={{display: 'flex', gap: 10, flexWrap: 'wrap'}}>
-            <button onClick={handleQuerySlot0} style={{padding: '5px 10px', background: 'transparent', border: '1px solid #555', color: '#aaa', cursor:'pointer'}}>
-              查询 Slot0
-            </button>
-         </div>
-      </div>
 
       {/* 兑换确认模态框 */}
       <Modal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} title="确认兑换详情">

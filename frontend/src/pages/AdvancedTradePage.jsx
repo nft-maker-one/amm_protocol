@@ -2,23 +2,17 @@ import React, { useState, useRef } from 'react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast'; // 1. 引入 Toast
 import { 
-  Settings, 
   Route, 
   Activity, 
   CheckCircle, 
   XCircle, 
-  Info, 
-  ShieldAlert, 
+  Info,
   Search,
-  X,
   Copy
 } from 'lucide-react'; // 2. 引入图标
 
 import {
   ensureSepolia,
-  enableFeeAmount,
-  getFactoryOwner,
-  getFeeAmountTickSpacing,
   AMMFACTORY_ADDRESS,
   getPoolLiquidity,
   readSlot0,
@@ -33,36 +27,10 @@ import {
 } from '../api/routing';
 import { TOKENS, getTokenList } from '../api/tokens';
 
-// --- 通用 Modal 组件 ---
-const Modal = ({ isOpen, onClose, title, children }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button onClick={onClose} className="close-btn"><X size={20} /></button>
-        </div>
-        <div className="modal-body">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const AdvancedTradePage = () => {
   // --- 状态管理 ---
   const [tokenList, setTokenList] = useState(getTokenList());
-  const [newFee, setNewFee] = useState('');
-  const [tickSpacing, setTickSpacing] = useState('');
-  const [queryFee, setQueryFee] = useState('3000');
   const [loading, setLoading] = useState(false);
-  
-  // Owner权限相关
-  const [currentUser, setCurrentUser] = useState(null);
-  const [isOwner, setIsOwner] = useState(false);
-  const [ownerCheckLoading, setOwnerCheckLoading] = useState(false);
   
   // 路由测试状态
   const [selectedChain, setSelectedChain] = useState(11155111); // 默认 Sepolia
@@ -78,107 +46,10 @@ const AdvancedTradePage = () => {
   const [poolDiagnosis, setPoolDiagnosis] = useState(null);
   const [diagnosisLoading, setDiagnosisLoading] = useState(false);
 
-  // 确认弹窗状态
-  const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
-  
   // 引用结果区域以便滚动
   const resultRef = useRef(null);
 
-  // --- 1. Factory 管理逻辑 ---
-
-  const handleEnableFeeCheck = () => {
-    if (!newFee || !tickSpacing) return toast.error('请输入费率和 tick spacing');
-    if (Number.isNaN(Number(newFee)) || Number.isNaN(Number(tickSpacing))) {
-      return toast.error('必须是数字');
-    }
-    setIsFeeModalOpen(true);
-  };
-
-  const executeEnableFee = async () => {
-    setIsFeeModalOpen(false);
-    if (!window.ethereum) return toast.error('请先连接钱包');
-
-    const fee = Number(newFee);
-    const spacing = Number(tickSpacing);
-
-    const enablePromise = (async () => {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await ensureSepolia(provider);
-      const signer = await provider.getSigner();
-      const tx = await enableFeeAmount(provider, signer, fee, spacing);
-      return tx.hash;
-    })();
-
-    toast.promise(enablePromise, {
-      loading: '正在启用新费率...',
-      success: (hash) => `启用成功! Tx: ${hash.substring(0,8)}...`,
-      error: (err) => `失败: ${err.message}`
-    });
-  };
-
-  const handleQueryFeeTickSpacing = async () => {
-    if (!window.ethereum) return toast.error('请先连接钱包');
-    if (!queryFee) return toast.error('请输入费率');
-    const toastId = toast.loading('查询中...');
-    
-    try {
-      setLoading(true);
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await ensureSepolia(provider);
-      
-      const spacing = await getFeeAmountTickSpacing(provider, Number(queryFee));
-      setFeeTickSpacing(spacing);
-      
-      if (spacing === 0) {
-        toast.error(`费率 ${queryFee} 未启用`, { id: toastId });
-      } else {
-        toast.success(`Spacing: ${spacing}`, { id: toastId });
-      }
-    } catch (err) {
-      toast.error('查询失败: ' + err.message, { id: toastId });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // --- 2. Owner 检查逻辑 ---
-  const checkOwnerStatus = async () => {
-    if (!window.ethereum) return;
-
-    try {
-      setOwnerCheckLoading(true);
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      // 不强制 ensureSepolia，以免只是浏览页面就弹窗切换网络
-      
-      const signer = await provider.getSigner();
-      const userAddress = await signer.getAddress();
-      setCurrentUser(userAddress);
-      
-      const owner = await getFactoryOwner(provider);
-      setFactoryOwner(owner);
-      
-      const isUserOwner = userAddress.toLowerCase() === owner.toLowerCase();
-      setIsOwner(isUserOwner);
-      
-    } catch (err) {
-      console.warn('Check owner failed:', err);
-      setIsOwner(false);
-    } finally {
-      setOwnerCheckLoading(false);
-    }
-  };
-
-  React.useEffect(() => {
-    if (window.ethereum) {
-      checkOwnerStatus();
-      window.ethereum.on('accountsChanged', checkOwnerStatus);
-      return () => {
-        window.ethereum.removeListener('accountsChanged', checkOwnerStatus);
-      };
-    }
-  }, []);
-
-  // --- 3. 路由测试逻辑 (核心) ---
+  // --- 路由测试逻辑 (核心) ---
   const handleTestAdvancedRouting = async () => {
     if (!window.ethereum) return toast.error('请先连接钱包');
     if (!ethers.isAddress(routeTokenIn) || !ethers.isAddress(routeTokenOut)) {
@@ -397,22 +268,6 @@ const AdvancedTradePage = () => {
     <div className="container">
       <h2>🚀 高级路由与设置</h2>
       
-      {/* 模态框: 启用费率确认 */}
-      <Modal isOpen={isFeeModalOpen} onClose={() => setIsFeeModalOpen(false)} title="确认启用新费率">
-        <div style={{textAlign: 'left'}}>
-          <div className="data-card" style={{marginTop: 0}}>
-            <p><strong>费率 (Fee):</strong> {newFee} ({(Number(newFee)/10000).toFixed(2)}%)</p>
-            <p><strong>Tick Spacing:</strong> {tickSpacing}</p>
-          </div>
-          <div style={{fontSize: '0.85rem', color: '#e63946', margin: '15px 0'}}>
-            <p style={{display:'flex', alignItems:'center', gap: 5}}>
-              <ShieldAlert size={16}/> 仅 Factory Owner 可执行
-            </p>
-          </div>
-          <button className="action-btn" onClick={executeEnableFee}>确认并在钱包签名</button>
-        </div>
-      </Modal>
-
       {/* 1. 常规设置区域 */}
       <div className="input-group">
         <label>路由目标链</label>
@@ -678,54 +533,6 @@ const AdvancedTradePage = () => {
         )}
         </div>
       </div>
-
-      {/* 4. Factory 管理 (仅 Owner) */}
-      {isOwner && (
-        <div className="data-card" style={{marginTop: 30, border: '1px solid #4ade80'}}>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-             <h3 style={{margin:0, display:'flex', alignItems:'center', gap:8}}><Settings size={20}/> Factory 管理</h3>
-             <span style={{fontSize:'0.8rem', background:'#1a3a1a', color:'#4ade80', padding:'2px 8px', borderRadius:4}}>Owner 权限</span>
-          </div>
-          
-          <div style={{marginTop: 15}}>
-             <h4 style={{fontSize: '0.9rem', color: '#aaa'}}>查询配置</h4>
-             <div style={{display: 'flex', gap: 10, alignItems: 'center'}}>
-                <input 
-                   placeholder="Fee (e.g. 3000)" 
-                   value={queryFee} 
-                   onChange={e => setQueryFee(e.target.value)}
-                   style={{width: 120}} 
-                />
-                <button onClick={handleQueryFeeTickSpacing} disabled={loading} style={{padding: '8px 12px', cursor:'pointer'}}>查询 Spacing</button>
-             </div>
-          </div>
-
-          <div style={{marginTop: 20, paddingTop: 15, borderTop: '1px solid #333'}}>
-             <h4 style={{fontSize: '0.9rem', color: '#aaa'}}>启用新配置</h4>
-             <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10}}>
-                <div className="input-group">
-                   <label>费率 (Fee)</label>
-                   <input type="number" placeholder="500" value={newFee} onChange={e => setNewFee(e.target.value)} />
-                </div>
-                <div className="input-group">
-                   <label>Tick Spacing</label>
-                   <input type="number" placeholder="10" value={tickSpacing} onChange={e => setTickSpacing(e.target.value)} />
-                </div>
-             </div>
-             <button className="action-btn" onClick={handleEnableFeeCheck} disabled={loading} style={{marginTop: 10}}>
-                {loading ? '处理中...' : '启用新费率层级'}
-             </button>
-          </div>
-        </div>
-      )}
-      
-      {/* 非 Owner 提示 */}
-      {!isOwner && currentUser && !ownerCheckLoading && (
-         <div style={{marginTop: 30, padding: 15, background: '#1a1a1a', borderRadius: 8, color: '#666', fontSize: '0.9rem', textAlign: 'center'}}>
-            <ShieldAlert size={16} style={{marginBottom: 5}}/>
-            <p style={{margin:0}}>Factory 管理功能仅向 Owner 开放</p>
-         </div>
-      )}
     </div>
   );
 };
