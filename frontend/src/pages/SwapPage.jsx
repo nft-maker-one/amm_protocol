@@ -9,8 +9,18 @@ import { getPoolList, updatePoolInList } from '../api/pools';
 import TokenInputSelector from '../components/ui/TokenInputSelector';
 import PoolInfoCard from '../components/ui/PoolInfoCard';
 import {
-  AMMPOOL_ADDRESS, ensureSepolia, getPool, readSlot0,
-  getPoolContract, swapExactIn, estimateSwapOut
+  AMMPOOL_ADDRESS,
+  ensureSepolia,
+  getPool,
+  getTokenInfo,
+  getPoolContract,
+  swapExactIn,
+  estimateSwapOut,
+  checkPoolStatus,
+  // ⚠️ 注意：如果你的 amm.js 里没有 createPool，这两行可能还会报错。
+  // 如果再次报错，请把下面这两行也注释掉
+  createPool, 
+  simulateCreatePool,
 } from '../api/amm';
 
 // --- Helper: 安全调用 View 函数 ---
@@ -60,38 +70,10 @@ const SwapPage = () => {
     }
   }, []);
 
-  // --- 调试功能 ---
-  const handleReadSlot0 = async () => {
-    if (!selectedPool) return toast.error('请先选择一个池子');
-    if (!window.ethereum) return toast.error('请连接钱包');
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const decoded = await safeCallView(provider, selectedPool.address, AMMPoolABI, 'slot0');
-      const updatedPool = {
-        ...selectedPool,
-        isInitialized: true,
-        sqrtPriceX96: decoded[0].toString(),
-        currentTick: decoded[1].toString()
-      };
-      updatePoolInList(selectedPool.address, updatedPool);
-      setSelectedPool(updatedPool);
-      toast.success(`Slot0: P=${decoded[0].toString().slice(0,6)}... Tick=${decoded[1]}`);
-    } catch (err) {
-      toast.error('读取 Slot0 失败: ' + err.message);
-    }
-  };
+  const tokenA = tokenAChoice === 'custom' ? tokenACustom : tokenAChoice;
+  const tokenB = tokenBChoice === 'custom' ? tokenBCustom : tokenBChoice;
 
-  const handleQuerySlot0 = async () => {
-    if (!window.ethereum) return toast.error('请连接钱包');
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const decoded = await safeCallView(provider, AMMPOOL_ADDRESS, AMMPoolABI, 'slot0');
-      toast(`Global Slot0:\nPrice: ${decoded[0]}\nTick: ${decoded[1]}`, { icon: 'ℹ️' });
-    } catch (err) {
-      toast.error('查询失败: ' + err.message);
-    }
-  };
-
+  // --- Swap 检查 ---
   const handleSwapCheck = async () => {
     if (!selectedPool) return toast.error('请先选择一个池子');
     if (!payAmount || payAmount <= 0) return toast.error('请输入数量');
