@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import toast from 'react-hot-toast'; 
-import { X, Settings, Eye, Copy } from 'lucide-react'; 
+import toast from 'react-hot-toast';
+import { X, ArrowDown, Wrench, RefreshCw } from 'lucide-react';
 
 import AMMPoolABI from '../api/abi/AMMPool.json';
 import { getTokenList, TOKENS, findTokenByAddress } from '../api/tokens';
-import { getPoolList } from '../api/pools';
+import { getPoolList, updatePoolInList } from '../api/pools';
+import TokenInputSelector from '../components/ui/TokenInputSelector';
+import PoolInfoCard from '../components/ui/PoolInfoCard';
 import {
   AMMPOOL_ADDRESS,
   ensureSepolia,
@@ -21,33 +23,6 @@ import {
   simulateCreatePool,
 } from '../api/amm';
 
-// --- 🚑 紧急修复：本地定义这些缺失的辅助函数 ---
-// 这样就不会因为 import 不到而报错了
-const addPoolToList = (pool) => {
-  console.log("调用了 addPoolToList", pool);
-};
-const updatePoolInList = (addr, pool) => {
-  console.log("调用了 updatePoolInList", addr, pool);
-};
-
-// --- 内部组件：通用模态框 ---
-const Modal = ({ isOpen, onClose, title, children }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button onClick={onClose} className="close-btn"><X size={20} /></button>
-        </div>
-        <div className="modal-body">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // --- Helper: 安全调用 View 函数 ---
 async function safeCallView(provider, address, abi, fnName, args = []) {
   const iface = new ethers.Interface(abi);
@@ -57,37 +32,42 @@ async function safeCallView(provider, address, abi, fnName, args = []) {
   return iface.decodeFunctionResult(fnName, res);
 }
 
+const Modal = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="modal-overlay" style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000}}>
+      <div style={{background:'#1a1a1a', padding:20, borderRadius:12, width:'90%', maxWidth:500, border:'1px solid #333'}}>
+        <div style={{display:'flex', justifyContent:'space-between', marginBottom:20}}>
+          <h3 style={{margin:0}}>{title}</h3>
+          <X onClick={onClose} style={{cursor:'pointer'}} />
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const SwapPage = () => {
-  // 动态 token 列表
   const [tokenList, setTokenList] = useState(getTokenList());
-  
-  // 已有交易对列表和模态框状态
   const [poolList, setPoolList] = useState(getPoolList());
   const [isPoolModalOpen, setIsPoolModalOpen] = useState(false);
   
-  // --- 状态变量 ---
-  const [tokenAChoice, setTokenAChoice] = useState(TOKENS.USDT.address);
-  const [tokenBChoice, setTokenBChoice] = useState(TOKENS.WETH.address);
-  const [tokenACustom, setTokenACustom] = useState('');
-  const [tokenBCustom, setTokenBCustom] = useState('');
-  const [feeInput, setFeeInput] = useState('3000');
-  const [payAmount, setPayAmount] = useState('');
-  
-  const [swapping, setSwapping] = useState(false);
-  const [estOutInfo, setEstOutInfo] = useState(null); 
-  const [slippagePct, setSlippagePct] = useState('1.0'); 
-
-  // Pool 相关状态（已移除查找/创建池子功能）
   const [selectedPool, setSelectedPool] = useState(null);
-  
-  // 确认弹窗状态
+  const [tokenAChoice, setTokenAChoice] = useState(TOKENS.USDT.address);
+  const [tokenACustom, setTokenACustom] = useState('');
+  const [payAmount, setPayAmount] = useState('');
+  const [estOutInfo, setEstOutInfo] = useState(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [pendingTxArgs, setPendingTxArgs] = useState(null);
+  const [pendingTx, setPendingTx] = useState(null);
+  const [swapping, setSwapping] = useState(false);
 
-  // 监听 token 列表变化
   useEffect(() => {
-    const updatedList = getTokenList();
-    setTokenList(updatedList);
+    const latestPools = getPoolList();
+    setPoolList(latestPools);
+    setTokenList(getTokenList());
+    if (latestPools.length > 0 && !selectedPool) {
+      setSelectedPool(latestPools[0]);
+    }
   }, []);
 
   const tokenA = tokenAChoice === 'custom' ? tokenACustom : tokenAChoice;
@@ -95,403 +75,168 @@ const SwapPage = () => {
 
   // --- Swap 检查 ---
   const handleSwapCheck = async () => {
-    // 首先强制检查是否选择了池子
-    if (!selectedPool) {
-      return toast.error('❌ 请先选择一个交易对！\n\n点击下方"🔄 选择交易对"按钮选择有流动性的池子。');
-    }
-
-    if (!window.ethereum) return toast.error('请先连接钱包');
-    if (!payAmount || Number(payAmount) <= 0) return toast.error('请输入数量');
+    if (!selectedPool) return toast.error('请先选择一个池子');
+    if (!payAmount || payAmount <= 0) return toast.error('请输入数量');
     
     setSwapping(true);
-    const toastId = toast.loading('正在计算价格...');
+    const toastId = toast.loading('报价中...');
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-      await ensureSepolia(provider);
+      const pool = getPoolContract(provider, selectedPool.address);
+      const t0 = await pool.token0();
       
-      if (!ethers.isAddress(tokenA) || !ethers.isAddress(tokenB)) {
-        toast.dismiss(toastId);
-        setSwapping(false);
-        return toast.error('Token 地址无效');
-      }
-
-      // 使用已选择的池子地址
-      const poolAddr = selectedPool.address;
+      const tokenAAddr = tokenAChoice === 'custom' ? tokenACustom : tokenAChoice;
+      const zeroForOne = tokenAAddr.toLowerCase() === t0.toLowerCase();
       
-      if (!poolAddr || poolAddr === ethers.ZeroAddress) {
-        toast.dismiss(toastId);
-        setSwapping(false);
-        return toast.error('未找到池子，请先创建');
-      }
-
-      // 检查池子初始化状态
-      console.log(`🔍 检查池子初始化状态: ${poolAddr.slice(0,8)}...`);
-      const poolStatus = await checkPoolStatus(provider, poolAddr);
-      if (poolStatus.status !== 'INITIALIZED') {
-        toast.dismiss(toastId);
-        setSwapping(false);
-        if (poolStatus.status === 'NOT_INITIALIZED') {
-          return toast.error('❌ 池子未初始化！需要先在部署页面里初始化该池子');
-        } else {
-          return toast.error(`❌ 池子状态异常: ${poolStatus.message}`);
-        }
-      }
-
-      const pool = getPoolContract(provider, poolAddr);
-      const [t0, t1] = await Promise.all([pool.token0(), pool.token1()]);
-      const tokenInAddr = tokenA.toLowerCase();
-      const zeroForOne = tokenInAddr === t0.toLowerCase() ? true : tokenInAddr === t1.toLowerCase() ? false : null;
-
-      if (zeroForOne === null) throw new Error('Token 与池子不匹配');
-
-      let decimals = 18;
-      const tokenMeta = findTokenByAddress(tokenInAddr);
-      decimals = tokenMeta?.decimalsHint || (await getTokenInfo(provider, tokenInAddr)).decimals;
-      const amountIn = ethers.parseUnits(payAmount, Number(decimals));
-
-      const est = await estimateSwapOut(provider, poolAddr, zeroForOne, amountIn);
-
-      let outDecimals = 18;
-      const outMeta = findTokenByAddress(est.tokenOut);
-      outDecimals = outMeta?.decimalsHint || (await getTokenInfo(provider, est.tokenOut)).decimals;
-      const estOutHuman = ethers.formatUnits(est.amountOut, Number(outDecimals));
+      const metaIn = findTokenByAddress(tokenAAddr);
+      const amountIn = ethers.parseUnits(payAmount, metaIn?.decimalsHint || 18);
       
-      const slipNum = Number(slippagePct || '0');
-      const minOut = (est.amountOut * BigInt(Math.round((100 - slipNum) * 100))) / 10000n;
-      const minOutHuman = ethers.formatUnits(minOut, Number(outDecimals));
-
-      setEstOutInfo({
-        amountOut: est.amountOut,
-        estOutHuman,
-        tokenOutSymbol: outMeta?.symbol || 'TokenB',
-        tokenInSymbol: tokenMeta?.symbol || 'TokenA',
-        minOutHuman,
-        priceStr: `1 ${tokenMeta?.symbol} ≈ ${(Number(estOutHuman)/Number(payAmount)).toFixed(4)} ${outMeta?.symbol}`,
-        slippage: slipNum
+      const est = await estimateSwapOut(provider, selectedPool.address, zeroForOne, amountIn);
+      const metaOut = findTokenByAddress(est.tokenOut);
+      const estHuman = ethers.formatUnits(est.amountOut, metaOut?.decimalsHint || 18);
+      
+      setEstOutInfo({ 
+        estHuman, 
+        symbolOut: metaOut?.symbol || 'Token',
+        symbolIn: metaIn?.symbol || 'Token'
       });
-
-      setPendingTxArgs({ poolAddr, zeroForOne, amountIn });
-      
-      toast.dismiss(toastId);
-      setSwapping(false);
-      setIsConfirmOpen(true); 
-
+      setPendingTx({ poolAddr: selectedPool.address, zeroForOne, amountIn });
+      setIsConfirmOpen(true);
     } catch (err) {
+      toast.error('报价失败: ' + err.message);
+    } finally {
       toast.dismiss(toastId);
       setSwapping(false);
-      console.error('交换计算错误:', err);
-      
-      // 提供更详细的错误提示
-      let errorMsg = err.message;
-      if (errorMsg.includes('未初始化')) {
-        errorMsg = `❌ 池子 ${selectedPool?.token0Meta?.symbol}/${selectedPool?.token1Meta?.symbol} 未初始化\n\n` +
-                   `请在"🚀 部署"页面中初始化该池子。`;
-      } else if (errorMsg.includes('无流动性')) {
-        errorMsg = `❌ 池子 ${selectedPool?.token0Meta?.symbol}/${selectedPool?.token1Meta?.symbol} 无流动性\n\n` +
-                   `请在"💧 流动性管理"页面中添加流动性。`;
-      } else if (errorMsg.includes('reverted')) {
-        errorMsg = `❌ 池子调用失败\n可能原因：未初始化或无流动性\n\n` +
-                   `请检查：\n1️⃣ 池子是否初始化\n2️⃣ 是否有足够的流动性`;
-      }
-      
-      toast.error(errorMsg);
     }
   };
 
-  // --- Swap 执行 ---
   const executeSwap = async () => {
-    if (!pendingTxArgs) return;
     setIsConfirmOpen(false);
-
-    const swapPromise = (async () => {
-      try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
-        const res = await swapExactIn(provider, signer, pendingTxArgs.poolAddr, pendingTxArgs.zeroForOne, pendingTxArgs.amountIn);
-        return res.tx.hash;
-      } catch (err) {
-        // 根据错误类型提供更好的错误消息
-        console.error('交换执行错误:', err);
-        let detailedError = err.message;
-        
-        if (err.message.includes('未初始化')) {
-          detailedError = '池子未初始化。请在部署页面初始化该池子后再尝试交换';
-        } else if (err.message.includes('无流动性')) {
-          detailedError = '池子无流动性。请先添加流动性后再尝试交换';
-        } else if (err.message.includes('reverted') || err.message.includes('execution reverted')) {
-          detailedError = '交换执行失败（合约 revert）。可能原因：\n1. 池子未初始化\n2. 流动性不足\n3. 滑点超过保护值';
-        } else if (err.message.includes('价格滑点超限')) {
-          detailedError = '滑点超过保护值。可以增大滑点容限后重试';
-        }
-        
-        throw new Error(detailedError);
-      }
-    })();
-
-      toast.promise(swapPromise, {
-        loading: '正在提交交易...',
-        success: (hash) => `交易已发送! Hash: ${hash.substring(0,8)}...`,
-        error: (err) => {
-          let msg = err.message || String(err);
-          
-          // 改进错误提示
-          if (msg.includes('无流动性')) {
-            msg = `❌ 池子无流动性！\n\n` +
-                  `当前池子: ${selectedPool?.token0Meta?.symbol}/${selectedPool?.token1Meta?.symbol}\n` +
-                  `需要先在流动性管理页面添加流动性。`;
-          } else if (msg.includes('未初始化')) {
-            msg = `❌ 池子未初始化！\n\n需要在部署页面初始化该池子。`;
-          }
-          
-          return msg;
-        }
-      });
+    const tid = toast.loading('请在钱包确认...');
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const res = await swapExactIn(provider, signer, pendingTx.poolAddr, pendingTx.zeroForOne, pendingTx.amountIn);
+      toast.success('兑换成功！', { id: tid });
+    } catch (err) {
+      toast.error('失败: ' + err.message, { id: tid });
+    }
   };
 
   return (
+    // 修改点 1: 移除了 style={{maxWidth:480}}，现在它会继承全局 container 的宽度
     <div className="container">
-      <h2>💱 代币兑换 (AMM)</h2>
+      {/* 修改点 2: 移除了 textAlign:'center'，改为左对齐，与其他页面保持一致 */}
+      <h2>💱 代币兑换 (Swap)</h2>
       
-      <p style={{color: '#888', marginBottom: '20px'}}>
-        基于创新曲线设计的自动做市商兑换。
-      </p>
-
-      {/* 池子选择区域 - 强调重要性 */}
-      <div style={{
-        padding: '15px',
-        backgroundColor: selectedPool ? 'rgba(74, 222, 128, 0.1)' : 'rgba(255, 159, 64, 0.15)',
-        border: `2px solid ${selectedPool ? '#4ade80' : '#ff9f40'}`,
-        borderRadius: '8px',
-        marginBottom: '20px'
-      }}>
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-          <div style={{flex: 1}}>
-            <div style={{fontSize: '0.85rem', color: '#aaa', marginBottom: '5px'}}>📍 当前交易对：</div>
-            {selectedPool ? (
-              <div style={{fontSize: '1.1rem', fontWeight: 'bold', color: selectedPool ? '#4ade80' : '#ff9f40'}}>
-                {selectedPool.token0Meta?.symbol}/{selectedPool.token1Meta?.symbol} 
-                <span style={{fontSize: '0.85rem', color: '#888', marginLeft: '8px'}}>Fee: {selectedPool.fee}</span>
-              </div>
-            ) : (
-              <div style={{fontSize: '1rem', fontWeight: 'bold', color: '#ff9f40'}}>❌ 未选择 - 请先选择交易对</div>
-            )}
-            {selectedPool && (
-              <div style={{fontSize: '0.75rem', color: '#666', marginTop: '4px'}}>
-                {selectedPool.address.slice(0,6)}...{selectedPool.address.slice(-4)}
-              </div>
-            )}
+      {/* 顶部：池子选择 */}
+      <div style={{marginBottom:20}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+           <label style={{fontSize:'0.9rem', color:'#888'}}>当前交易对</label>
+           {/* 加个刷新按钮显得更专业 */}
+           <button onClick={() => setPoolList(getPoolList())} style={{background:'none', border:'none', color:'#666', cursor:'pointer', display:'flex', alignItems:'center', gap:4, fontSize:'0.8rem'}}>
+             <RefreshCw size={12}/> 刷新列表
+           </button>
+        </div>
+        
+        {selectedPool ? (
+          <PoolInfoCard pool={selectedPool} isActive={true} onClick={() => setIsPoolModalOpen(true)} showDetails={false} />
+        ) : (
+          <div onClick={() => setIsPoolModalOpen(true)} style={{padding:20, border:'2px dashed #444', borderRadius:12, textAlign:'center', cursor:'pointer', color:'#aaa'}}>
+            + 点击选择可用交易对
           </div>
+        )}
+      </div>
+
+      {/* 主卡片区域 */}
+      <div className="data-card" style={{padding:20, borderRadius:16, background:'#111', borderLeft: '4px solid #646cff'}}>
+        <TokenInputSelector label="支付 (Pay)" choice={tokenAChoice} setChoice={setTokenAChoice} customValue={tokenACustom} setCustomValue={setTokenACustom} tokenList={tokenList} />
+        
+        {/* 输入框样式调整，使其在宽屏下也好看 */}
+        <div style={{position:'relative'}}>
+           <input 
+             type="number" 
+             placeholder="0.0" 
+             value={payAmount} 
+             onChange={e=>setPayAmount(e.target.value)} 
+             className="big-input" 
+             style={{
+               fontSize: 28, 
+               width:'100%', 
+               background:'transparent', 
+               border:'none', 
+               color:'#fff', 
+               padding:'10px 0',
+               fontWeight: 'bold',
+               outline: 'none'
+             }} 
+           />
+           <span style={{position:'absolute', right:0, top: '50%', transform:'translateY(-50%)', color:'#666', fontSize:'0.9rem'}}>
+             {findTokenByAddress(tokenAChoice === 'custom' ? tokenACustom : tokenAChoice)?.symbol || ''}
+           </span>
+        </div>
+        
+        <div style={{display:'flex', justifyContent:'center', margin:'15px 0'}}>
+          <div style={{background:'#333', borderRadius:'50%', padding:8, display:'flex'}}>
+            <ArrowDown size={20} color="#646cff" />
+          </div>
+        </div>
+
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px', background:'#1a1a1a', borderRadius:8}}>
+           <span style={{fontSize:'0.9rem', color:'#888'}}>预估获得 (Est. Receive)</span>
+           <span style={{fontSize:'1.2rem', color: estOutInfo ? '#4ade80' : '#666', fontWeight:'bold'}}>
+             {estOutInfo ? `${estOutInfo.estHuman} ${estOutInfo.symbolOut}` : '--'}
+           </span>
+        </div>
+      </div>
+
+      <button className="action-btn" style={{marginTop:20, height:55, borderRadius:16, fontSize:18}} onClick={handleSwapCheck} disabled={swapping}>
+        {swapping ? '正在计算最佳报价...' : '🚀 立即兑换'}
+      </button>
+
+      {/* 开发者工具 */}
+      <div style={{marginTop: 40, borderTop: '1px solid #333', paddingTop: 15}}>
+        <div style={{fontSize: '0.8rem', color: '#666', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5}}>
+          <Wrench size={12}/> 开发者调试工具
+        </div>
+        <div style={{display: 'flex', gap: 10}}>
           <button 
-            onClick={() => setIsPoolModalOpen(true)}
-            style={{
-              padding: '10px 16px',
-              background: selectedPool ? '#4ade80' : '#ff9f40',
-              border: 'none',
-              borderRadius: '6px',
-              color: selectedPool ? 'black' : 'white',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              fontSize: '0.9rem',
-              whiteSpace: 'nowrap'
-            }}
+            onClick={handleReadSlot0}
+            style={{flex: 1, padding: '8px', background: 'transparent', border: '1px solid #444', color: '#888', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem'}}
           >
-            🔄 {selectedPool ? '切换' : '选择'}交易对
+            读取当前 Pool Slot0
+          </button>
+          <button 
+            onClick={handleQuerySlot0}
+            style={{flex: 1, padding: '8px', background: 'transparent', border: '1px solid #444', color: '#888', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem'}}
+          >
+            查询全局 Slot0 (Debug)
           </button>
         </div>
       </div>
 
-      {/* 查看已有交易对按钮 */}
-      <div style={{marginBottom:'20px'}}>
-        <button 
-          onClick={() => setIsPoolModalOpen(true)}
-          style={{
-            padding: '10px 16px',
-            background: '#333',
-            border: '1px solid #555',
-            borderRadius: '4px',
-            color: '#aaa',
-            cursor: 'pointer',
-            fontSize: '0.9rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-          title="查看已有的交易对"
-        >
-          <Eye size={16} /> 查看已有交易对 ({poolList.length})
-        </button>
-      </div>
-      
-      {/* UI 输入部分 */}
-      <div className="input-group">
-        <label>支付 (Token A)</label>
-        <div style={{display: 'flex', gap: '10px'}}>
-          <input type="number" placeholder="0.0" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
-          <select style={{width: '120px'}} value={tokenAChoice} onChange={e=>setTokenAChoice(e.target.value)}>
-            {tokenList.map(t => <option key={t.address} value={t.address}>{t.symbol}</option>)}
-            <option value="custom">自定义</option>
-          </select>
+      {/* Modals */}
+      <Modal isOpen={isPoolModalOpen} onClose={() => setIsPoolModalOpen(false)} title="选择交易对">
+        <div style={{maxHeight:300, overflowY:'auto'}}>
+          {poolList.length > 0 ? poolList.map(p => (
+            <PoolInfoCard key={p.address} pool={p} isActive={selectedPool?.address === p.address} onClick={() => { setSelectedPool(p); setIsPoolModalOpen(false); }} />
+          )) : <p style={{textAlign:'center', color:'#555'}}>暂无可用池子，请先去部署页面创建。</p>}
         </div>
-        {tokenAChoice === 'custom' && <input style={{marginTop: 6}} placeholder="0x..." value={tokenACustom} onChange={e => setTokenACustom(e.target.value)} />}
-      </div>
+      </Modal>
 
-      <div className="input-group">
-        <label>接收 (Token B)</label>
-        <div style={{display: 'flex', gap: '10px'}}>
-          <input type="number" placeholder="自动计算" disabled value={estOutInfo ? estOutInfo.estOutHuman : ''} />
-          <select style={{width: '120px'}} value={tokenBChoice} onChange={e=>setTokenBChoice(e.target.value)}>
-            {tokenList.map(t => <option key={t.address} value={t.address}>{t.symbol}</option>)}
-            <option value="custom">自定义</option>
-          </select>
-        </div>
-        {tokenBChoice === 'custom' && <input style={{marginTop: 6}} placeholder="0x..." value={tokenBCustom} onChange={e => setTokenBCustom(e.target.value)} />}
-      </div>
-
-      <div className="input-group">
-        <label>最大滑点 (%)</label>
-        <input type="number" value={slippagePct} onChange={e => setSlippagePct(e.target.value)} step="0.1" />
-      </div>
-      
-      <div className="data-card">
-         <div style={{display: 'flex', justifyContent: 'space-between'}}>
-           <span>预估价格</span>
-           <span>{estOutInfo ? estOutInfo.priceStr : '--'}</span>
-         </div>
-      </div>
-
-      <button className="action-btn" onClick={handleSwapCheck} disabled={swapping}>
-        {swapping ? '计算中...' : '立即兑换'}
-      </button>
-
-      {/* 兑换确认模态框 */}
-      <Modal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} title="确认兑换详情">
+      <Modal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} title="确认交易">
         {estOutInfo && (
-          <div>
-             <div className="data-card" style={{marginTop:0, border:'1px solid #444'}}>
-                <div style={{display:'flex', justifyContent:'space-between'}}>
-                  <span>支付</span>
-                  <b>{payAmount} {estOutInfo.tokenInSymbol}</b>
-                </div>
-                <div style={{display:'flex', justifyContent:'space-between', marginTop:10}}>
-                  <span>接收 (预估)</span>
-                  <b>{estOutInfo.estOutHuman} {estOutInfo.tokenOutSymbol}</b>
-                </div>
-             </div>
-             <p style={{fontSize:'0.8rem', color:'#aaa', marginTop:10}}>
-               滑点保护 ({estOutInfo.slippage}%)<br/>
-               至少接收: {estOutInfo.minOutHuman} {estOutInfo.tokenOutSymbol}
-             </p>
-             <button className="action-btn" onClick={executeSwap}>确认并在钱包签名</button>
+          <div style={{textAlign:'center'}}>
+            <p style={{fontSize:20}}>支付 {payAmount} {estOutInfo.symbolIn}</p>
+            <ArrowDown size={24} style={{margin:'10px 0', color:'#666'}}/>
+            <p style={{fontSize:24, color:'#4ade80', fontWeight:'bold'}}>{estOutInfo.estHuman} {estOutInfo.symbolOut}</p>
+            <div style={{fontSize: '0.85rem', color: '#888', marginTop: 15, padding: 10, background: '#222', borderRadius: 6}}>
+               请在钱包中确认交易详情
+            </div>
+            <button className="action-btn" style={{marginTop:20}} onClick={executeSwap}>确认并签名</button>
           </div>
         )}
       </Modal>
-
-      {/* 已有交易对模态框 */}
-      {isPoolModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: '#1a1a1a',
-            borderRadius: '12px',
-            border: '1px solid #333',
-            maxWidth: '600px',
-            maxHeight: '80vh',
-            overflowY: 'auto',
-            padding: '20px',
-            width: '90%'
-          }}>
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
-              <h3 style={{margin:0}}>已有的交易对</h3>
-              <button 
-                onClick={() => setIsPoolModalOpen(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#aaa',
-                  cursor: 'pointer',
-                  fontSize: '24px'
-                }}
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            {poolList.length === 0 ? (
-              <div style={{textAlign:'center', color:'#888', padding:'40px 20px'}}>
-                <p>暂无已创建的交易对</p>
-                <p style={{fontSize:'0.9rem'}}>请前往部署页面创建交易对。</p>
-              </div>
-            ) : (
-              <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
-                {poolList.map((pool, idx) => (
-                  <div key={pool.address} style={{
-                    padding: '15px',
-                    backgroundColor: selectedPool?.address === pool.address ? '#1a3a1a' : '#222',
-                    borderRadius: '8px',
-                    borderLeft: `4px solid ${selectedPool?.address === pool.address ? '#4ade80' : '#646cff'}`,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    opacity: selectedPool?.address === pool.address ? 1 : 0.8
-                  }}
-                  onClick={() => {
-                    setSelectedPool(pool);
-                    setIsPoolModalOpen(false);
-                    toast.success(`✅ 已选择: ${pool.token0Meta?.symbol}/${pool.token1Meta?.symbol}`);
-                  }}>
-                    <div style={{marginBottom:'8px', display: 'flex', justifyContent: 'space-between', alignItems: 'start'}}>
-                      <div>
-                        <div style={{fontSize:'0.9rem', fontWeight:'bold', color:'#fff'}}>
-                          #{idx + 1} {pool.token0Meta?.symbol}/{pool.token1Meta?.symbol} (Fee: {pool.fee})
-                        </div>
-                        <div style={{fontSize:'0.75rem', color:'#888', marginTop:'4px'}}>
-                          {pool.isInitialized ? '✅ 已初始化' : '⚠️ 未初始化'}
-                        </div>
-                      </div>
-                      {selectedPool?.address === pool.address && (
-                        <div style={{fontSize: '1.2rem'}}>✓</div>
-                      )}
-                    </div>
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'auto 1fr auto',
-                      gap: '8px',
-                      alignItems: 'center',
-                      fontSize: '0.8rem'
-                    }}>
-                      <span style={{color:'#aaa'}}>地址:</span>
-                      <code style={{color:'#4ade80', wordBreak:'break-all'}}>{pool.address}</code>
-                      <button 
-                        onClick={() => {
-                          navigator.clipboard.writeText(pool.address);
-                          toast.success('已复制');
-                        }}
-                        style={{padding:'4px 8px', background:'#333', border:'none', borderRadius:'4px', cursor:'pointer'}}
-                      >
-                        <Copy size={14}/>
-                      </button>
-                    </div>
-                    {pool.sqrtPriceX96 && (
-                      <div style={{marginTop:'8px', fontSize:'0.8rem', color:'#888'}}>
-                        SqrtPrice: {pool.sqrtPriceX96}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };
