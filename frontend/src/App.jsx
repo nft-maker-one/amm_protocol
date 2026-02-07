@@ -1,11 +1,10 @@
-// src/App.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ethers } from 'ethers';
-// 1. 加回这行：引入 Toast 库
 import toast, { Toaster } from 'react-hot-toast';
 
-import { NavBar } from './components';
+import NavBar from './components/ui/NavBar';
+
 import {
   SwapPage,
   LiquidityPage,
@@ -18,29 +17,72 @@ import {
 function App() {
   const [account, setAccount] = useState(null);
 
+  useEffect(() => {
+    const checkConnection = async () => {
+      if (window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          
+          if (accounts.length > 0) {
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            const address = await signer.getAddress();
+            setAccount(address);
+            console.log("Auto-connected to:", address);
+          }
+        } catch (error) {
+          console.error("Auto-connection check failed:", error);
+        }
+      }
+    };
+
+    checkConnection();
+
+    const handleAccountsChanged = (accounts) => {
+      if (accounts.length > 0) {
+        setAccount(accounts[0]);
+        toast.success("Account switched");
+      } else {
+        setAccount(null);
+        toast("Wallet disconnected");
+      }
+    };
+
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+    }
+
+    return () => {
+      if (window.ethereum && window.ethereum.removeListener) {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      }
+    };
+  }, []);
+
   const connectWallet = async () => {
     if (window.ethereum) {
       try {
         const provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
         const signer = await provider.getSigner();
-        setAccount(await signer.getAddress());
-        // 2. 加回这行：连接成功提示
-        toast.success("钱包连接成功！");
+        const address = await signer.getAddress();
+        setAccount(address);
+        toast.success("Wallet connected successfully!");
       } catch (error) {
-        console.error("User rejected connection", error);
-        toast.error("连接被拒绝");
+        console.error("Connection error:", error);
+        toast.error("Connection rejected or an error occurred");
       }
     } else {
-      toast.error("请安装 MetaMask!");
+      toast.error("Please install MetaMask!");
     }
   };
 
   return (
     <Router>
-      {/* 3. 加回这行：Toast 的全局显示位 */}
-      <Toaster position="top-center" />
+      <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
       
       <NavBar account={account} connectWallet={connectWallet} />
+      
       <Routes>
         <Route path="/" element={<SwapPage />} />
         <Route path="/liquidity" element={<LiquidityPage />} />

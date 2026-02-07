@@ -15,8 +15,6 @@ import {
   swapExactIn,
   estimateSwapOut,
   checkPoolStatus,
-  // ⚠️ 注意：如果你的 amm.js 里没有 createPool，这两行可能还会报错。
-  // 如果再次报错，请把下面这两行也注释掉
   createPool, 
   simulateCreatePool,
 } from '../api/amm';
@@ -61,13 +59,12 @@ const SwapPage = () => {
     }
   }, []);
 
-  // --- Swap 检查 ---
   const handleSwapCheck = async () => {
-    if (!selectedPool) return toast.error('请先选择一个池子');
-    if (!payAmount || payAmount <= 0) return toast.error('请输入数量');
+    if (!selectedPool) return toast.error('Please select a pool first');
+    if (!payAmount || payAmount <= 0) return toast.error('Please enter a valid amount');
     
     setSwapping(true);
-    const toastId = toast.loading('报价中...');
+    const toastId = toast.loading('Fetching quote...');
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const pool = getPoolContract(provider, selectedPool.address);
@@ -91,7 +88,7 @@ const SwapPage = () => {
       setPendingTx({ poolAddr: selectedPool.address, zeroForOne, amountIn });
       setIsConfirmOpen(true);
     } catch (err) {
-      toast.error('报价失败: ' + err.message);
+      toast.error('Quote failed: ' + err.message);
     } finally {
       toast.dismiss(toastId);
       setSwapping(false);
@@ -100,43 +97,38 @@ const SwapPage = () => {
 
   const executeSwap = async () => {
     setIsConfirmOpen(false);
-    const tid = toast.loading('请在钱包确认...');
+    const tid = toast.loading('Confirm in wallet...');
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const res = await swapExactIn(provider, signer, pendingTx.poolAddr, pendingTx.zeroForOne, pendingTx.amountIn);
-      toast.success('兑换成功！', { id: tid });
+      toast.success('Swap successful!', { id: tid });
     } catch (err) {
-      toast.error('失败: ' + err.message, { id: tid });
+      toast.error('Failed: ' + err.message, { id: tid });
     }
   };
 
   return (
-    // 修改点 1: 移除了 style={{maxWidth:480}}，现在它会继承全局 container 的宽度
     <div className="container">
-      {/* 修改点 2: 移除了 textAlign:'center'，改为左对齐，与其他页面保持一致 */}
-      <h2>💱 代币兑换 (Swap)</h2>
+      <h2>Swap Tokens</h2>
       
-      {/* 顶部：池子选择 */}
       <div style={{marginBottom:20}}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
-           <label style={{fontSize:'0.9rem', color:'#888'}}>当前交易对</label>
+           <label style={{fontSize:'0.9rem', color:'#888'}}>Current Pair</label>
         </div>
         
         {selectedPool ? (
           <PoolInfoCard pool={selectedPool} isActive={true} onClick={() => setIsPoolModalOpen(true)} showDetails={false} />
         ) : (
           <div onClick={() => setIsPoolModalOpen(true)} style={{padding:20, border:'2px dashed #444', borderRadius:12, textAlign:'center', cursor:'pointer', color:'#aaa'}}>
-            + 点击选择可用交易对
+            + Click to select a trading pair
           </div>
         )}
       </div>
 
-      {/* 主卡片区域 */}
       <div className="data-card" style={{padding:20, borderRadius:16, background:'#111', borderLeft: '4px solid #646cff'}}>
-        <TokenInputSelector label="支付 (Pay)" choice={tokenAChoice} setChoice={setTokenAChoice} customValue={tokenACustom} setCustomValue={setTokenACustom} tokenList={tokenList} />
+        <TokenInputSelector label="Pay" choice={tokenAChoice} setChoice={setTokenAChoice} customValue={tokenACustom} setCustomValue={setTokenACustom} tokenList={tokenList} />
         
-        {/* 输入框样式调整，使其在宽屏下也好看 */}
         <div style={{position:'relative'}}>
            <input 
              type="number" 
@@ -167,7 +159,7 @@ const SwapPage = () => {
         </div>
 
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px', background:'#1a1a1a', borderRadius:8}}>
-           <span style={{fontSize:'0.9rem', color:'#888'}}>预估获得 (Est. Receive)</span>
+           <span style={{fontSize:'0.9rem', color:'#888'}}>Est. Receive</span>
            <span style={{fontSize:'1.2rem', color: estOutInfo ? '#4ade80' : '#666', fontWeight:'bold'}}>
              {estOutInfo ? `${estOutInfo.estHuman} ${estOutInfo.symbolOut}` : '--'}
            </span>
@@ -175,28 +167,27 @@ const SwapPage = () => {
       </div>
 
       <button className="action-btn" style={{marginTop:20, height:55, borderRadius:16, fontSize:18}} onClick={handleSwapCheck} disabled={swapping}>
-        {swapping ? '正在计算最佳报价...' : '🚀 立即兑换'}
+        {swapping ? 'Calculating best quote...' : 'Swap Now'}
       </button>
 
-      {/* Modals */}
-      <Modal isOpen={isPoolModalOpen} onClose={() => setIsPoolModalOpen(false)} title="选择交易对">
+      <Modal isOpen={isPoolModalOpen} onClose={() => setIsPoolModalOpen(false)} title="Select Pair">
         <div style={{maxHeight:300, overflowY:'auto'}}>
           {poolList.length > 0 ? poolList.map(p => (
             <PoolInfoCard key={p.address} pool={p} isActive={selectedPool?.address === p.address} onClick={() => { setSelectedPool(p); setIsPoolModalOpen(false); }} />
-          )) : <p style={{textAlign:'center', color:'#555'}}>暂无可用池子，请先去部署页面创建。</p>}
+          )) : <p style={{textAlign:'center', color:'#555'}}>No pools available. Please create one on the deployment page.</p>}
         </div>
       </Modal>
 
-      <Modal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} title="确认交易">
+      <Modal isOpen={isConfirmOpen} onClose={() => setIsConfirmOpen(false)} title="Confirm Transaction">
         {estOutInfo && (
           <div style={{textAlign:'center'}}>
-            <p style={{fontSize:20}}>支付 {payAmount} {estOutInfo.symbolIn}</p>
+            <p style={{fontSize:20}}>Pay {payAmount} {estOutInfo.symbolIn}</p>
             <ArrowDown size={24} style={{margin:'10px 0', color:'#666'}}/>
             <p style={{fontSize:24, color:'#4ade80', fontWeight:'bold'}}>{estOutInfo.estHuman} {estOutInfo.symbolOut}</p>
             <div style={{fontSize: '0.85rem', color: '#888', marginTop: 15, padding: 10, background: '#222', borderRadius: 6}}>
-               请在钱包中确认交易详情
+                Please confirm transaction details in your wallet
             </div>
-            <button className="action-btn" style={{marginTop:20}} onClick={executeSwap}>确认并签名</button>
+            <button className="action-btn" style={{marginTop:20}} onClick={executeSwap}>Confirm and Sign</button>
           </div>
         )}
       </Modal>

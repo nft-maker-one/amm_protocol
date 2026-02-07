@@ -16,7 +16,6 @@ import {
   Area
 } from 'recharts';
 
-// 实时价格图表
 export const PriceChart = ({ data, token0Symbol = 'Token0', token1Symbol = 'Token1' }) => {
   if (!data || data.length === 0) {
     return (
@@ -28,14 +27,14 @@ export const PriceChart = ({ data, token0Symbol = 'Token0', token1Symbol = 'Toke
         background: '#111',
         borderRadius: '8px'
       }}>
-        <span style={{ color: '#666' }}>暂无价格数据</span>
+        <span style={{ color: '#666', fontSize: '14px', letterSpacing: '0.5px' }}>NO PRICE DATA AVAILABLE</span>
       </div>
     );
   }
 
   const formatTimestamp = (timestamp) => {
     const date = new Date(timestamp * 1000);
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
   return (
@@ -57,8 +56,8 @@ export const PriceChart = ({ data, token0Symbol = 'Token0', token1Symbol = 'Toke
           formatter={(value, name) => [value?.toFixed(8), name]}
           labelFormatter={(timestamp) => formatTimestamp(timestamp)}
           contentStyle={{ 
-            backgroundColor: '#222', 
-            border: '1px solid #444',
+            backgroundColor: '#1a1a1a', 
+            border: '1px solid #333',
             borderRadius: '6px',
             color: '#fff'
           }}
@@ -69,14 +68,13 @@ export const PriceChart = ({ data, token0Symbol = 'Token0', token1Symbol = 'Toke
           stroke="#00D4AA" 
           strokeWidth={2}
           dot={{ fill: '#00D4AA', strokeWidth: 2, r: 3 }}
-          name={`${token0Symbol}/${token1Symbol} 价格`}
+          name={`${token0Symbol}/${token1Symbol} Price`}
         />
       </LineChart>
     </ResponsiveContainer>
   );
 };
 
-// 流动性分布图表
 export const LiquidityChart = ({ data, currentTick }) => {
   if (!data || data.length === 0) {
     return (
@@ -88,7 +86,7 @@ export const LiquidityChart = ({ data, currentTick }) => {
         background: '#111',
         borderRadius: '8px'
       }}>
-        <span style={{ color: '#666' }}>暂无流动性数据</span>
+        <span style={{ color: '#666', fontSize: '14px', letterSpacing: '0.5px' }}>NO LIQUIDITY DATA</span>
       </div>
     );
   }
@@ -109,11 +107,11 @@ export const LiquidityChart = ({ data, currentTick }) => {
         <Tooltip 
           formatter={(value, name) => [
             name === 'liquidity' ? `${Number(value).toLocaleString()}` : value,
-            name === 'liquidity' ? '流动性' : name
+            name === 'liquidity' ? 'Liquidity' : name
           ]}
           contentStyle={{ 
-            backgroundColor: '#222', 
-            border: '1px solid #444',
+            backgroundColor: '#1a1a1a', 
+            border: '1px solid #333',
             borderRadius: '6px',
             color: '#fff'
           }}
@@ -123,24 +121,13 @@ export const LiquidityChart = ({ data, currentTick }) => {
           dataKey="liquidity" 
           stroke="#8884d8" 
           fill="#8884d8"
-          fillOpacity={0.6}
+          fillOpacity={0.4}
         />
-        {currentTick && (
-          <Line 
-            type="monotone" 
-            dataKey={null}
-            stroke="#FF6B6B"
-            strokeWidth={3}
-            dot={false}
-            // 在当前tick位置画一条垂直线
-          />
-        )}
       </AreaChart>
     </ResponsiveContainer>
   );
 };
 
-// 交易量图表
 export const VolumeChart = ({ data }) => {
   if (!data || data.length === 0) {
     return (
@@ -152,7 +139,7 @@ export const VolumeChart = ({ data }) => {
         background: '#111',
         borderRadius: '8px'
       }}>
-        <span style={{ color: '#666' }}>暂无交易量数据</span>
+        <span style={{ color: '#666', fontSize: '14px', letterSpacing: '0.5px' }}>NO VOLUME DATA</span>
       </div>
     );
   }
@@ -165,7 +152,7 @@ export const VolumeChart = ({ data }) => {
           dataKey="timestamp" 
           tickFormatter={(timestamp) => {
             const date = new Date(timestamp * 1000);
-            return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
           }}
           stroke="#888"
           fontSize={12}
@@ -177,27 +164,26 @@ export const VolumeChart = ({ data }) => {
         <Tooltip 
           formatter={(value, name) => [
             `${Number(value).toFixed(4)}`,
-            name === 'volume0' ? 'Token0 交易量' : 'Token1 交易量'
+            name === 'volume0' ? 'Token0 Vol' : 'Token1 Vol'
           ]}
           labelFormatter={(timestamp) => {
             const date = new Date(timestamp * 1000);
-            return date.toLocaleString('zh-CN');
+            return date.toLocaleString('en-US');
           }}
           contentStyle={{ 
-            backgroundColor: '#222', 
-            border: '1px solid #444',
+            backgroundColor: '#1a1a1a', 
+            border: '1px solid #333',
             borderRadius: '6px',
             color: '#fff'
           }}
         />
-        <Bar dataKey="volume0" fill="#8884d8" name="volume0" />
-        <Bar dataKey="volume1" fill="#82ca9d" name="volume1" />
+        <Bar dataKey="volume0" fill="#8884d8" name="Volume0" radius={[2, 2, 0, 0]} />
+        <Bar dataKey="volume1" fill="#82ca9d" name="Volume1" radius={[2, 2, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
 };
 
-// TVL组成饼图
 export const TVLPieChart = ({ data }) => {
   if (!data || (!data.token0TVL && !data.token1TVL)) {
     return (
@@ -209,7 +195,7 @@ export const TVLPieChart = ({ data }) => {
         background: '#111',
         borderRadius: '8px'
       }}>
-        <span style={{ color: '#666' }}>暂无TVL数据</span>
+        <span style={{ color: '#666', fontSize: '14px', letterSpacing: '0.5px' }}>NO TVL DATA</span>
       </div>
     );
   }
@@ -228,8 +214,9 @@ export const TVLPieChart = ({ data }) => {
           cy="50%"
           labelLine={false}
           label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
-          outerRadius={60}
-          fill="#8884d8"
+          outerRadius={65}
+          innerRadius={40}
+          stroke="none"
           dataKey="value"
         >
           {pieData.map((entry, index) => (
@@ -237,10 +224,10 @@ export const TVLPieChart = ({ data }) => {
           ))}
         </Pie>
         <Tooltip 
-          formatter={(value) => [`$${value.toFixed(2)}`, '总锁定价值']}
+          formatter={(value) => [`$${value.toLocaleString(undefined, {minimumFractionDigits: 2})}`, 'Total Value Locked']}
           contentStyle={{ 
-            backgroundColor: '#222', 
-            border: '1px solid #444',
+            backgroundColor: '#1a1a1a', 
+            border: '1px solid #333',
             borderRadius: '6px',
             color: '#fff'
           }}
@@ -250,7 +237,6 @@ export const TVLPieChart = ({ data }) => {
   );
 };
 
-// 价格影响图表
 export const PriceImpactChart = ({ data }) => {
   if (!data || data.length === 0) {
     return (
@@ -262,7 +248,7 @@ export const PriceImpactChart = ({ data }) => {
         background: '#111',
         borderRadius: '8px'
       }}>
-        <span style={{ color: '#666' }}>暂无价格影响数据</span>
+        <span style={{ color: '#666', fontSize: '14px', letterSpacing: '0.5px' }}>NO IMPACT DATA</span>
       </div>
     );
   }
@@ -275,6 +261,7 @@ export const PriceImpactChart = ({ data }) => {
           dataKey="amount" 
           stroke="#888"
           fontSize={12}
+          label={{ value: 'Trade Size', position: 'insideBottom', offset: -5, fill: '#666', fontSize: 10 }}
         />
         <YAxis 
           stroke="#888"
@@ -282,20 +269,20 @@ export const PriceImpactChart = ({ data }) => {
           tickFormatter={(value) => `${value.toFixed(2)}%`}
         />
         <Tooltip 
-          formatter={(value) => [`${value.toFixed(4)}%`, '价格影响']}
+          formatter={(value) => [`${value.toFixed(4)}%`, 'Price Impact']}
           contentStyle={{ 
-            backgroundColor: '#222', 
-            border: '1px solid #444',
+            backgroundColor: '#1a1a1a', 
+            border: '1px solid #333',
             borderRadius: '6px',
             color: '#fff'
           }}
         />
         <Line 
-          type="monotone" 
+          type="stepAfter" 
           dataKey="priceImpact" 
           stroke="#FF6B6B" 
           strokeWidth={2}
-          dot={{ fill: '#FF6B6B', strokeWidth: 2, r: 3 }}
+          dot={false}
         />
       </LineChart>
     </ResponsiveContainer>

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import { 
-  Coins, Flame, Search, User, Wallet, AlertTriangle, 
-  CheckCircle, XCircle, Copy 
+  Coins, Flame, User, Wallet, AlertTriangle, 
+  CheckCircle, XCircle
 } from 'lucide-react';
 
 import { getTokenList } from '../api/tokens';
@@ -20,7 +20,6 @@ import TokenInputSelector from '../components/ui/TokenInputSelector';
 const MockTokenPage = () => {
   const [tokenList, setTokenList] = useState(getTokenList());
   
-  // 使用统一的 Selector 状态
   const [tokenChoice, setTokenChoice] = useState(tokenList[0]?.address || '');
   const [tokenCustom, setTokenCustom] = useState('');
   
@@ -33,27 +32,24 @@ const MockTokenPage = () => {
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // 计算当前实际操作的代币地址
   const activeTokenAddr = tokenChoice === 'custom' ? tokenCustom : tokenChoice;
 
-  // 列表同步逻辑
   useEffect(() => {
     setTokenList(getTokenList());
   }, []);
 
-  // 自动查询逻辑：当地址改变且合法时自动触发
   useEffect(() => {
     if (ethers.isAddress(activeTokenAddr)) {
-      handleQueryBalance(false); // 静默查询
+      handleQueryBalance(false);
     }
   }, [activeTokenAddr]);
 
   const handleQueryBalance = async (showToast = true) => {
-    if (!window.ethereum) return showToast && toast.error('请先连接钱包');
-    if (!ethers.isAddress(activeTokenAddr)) return showToast && toast.error('无效的 Token 地址');
+    if (!window.ethereum) return showToast && toast.error('Please connect wallet first');
+    if (!ethers.isAddress(activeTokenAddr)) return showToast && toast.error('Invalid Token Address');
     
     let toastId;
-    if (showToast) toastId = toast.loading('正在同步合约权限...');
+    if (showToast) toastId = toast.loading('Syncing contract permissions...');
 
     try {
       setLoading(true);
@@ -78,17 +74,17 @@ const MockTokenPage = () => {
       
       setBalance(ethers.formatUnits(bal, info.decimals));
       setTokenInfo(info);
-      if (showToast) toast.success('同步成功', { id: toastId });
+      if (showToast) toast.success('Synced successfully', { id: toastId });
     } catch (err) {
-      if (showToast) toast.error('查询失败: ' + err.message, { id: toastId });
+      if (showToast) toast.error('Query failed: ' + err.message, { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
   const handleMint = async () => {
-    if (!toAddr || !mintAmount) return toast.error('请填写接收地址和数量');
-    const toastId = toast.loading('正在发起铸造交易...');
+    if (!toAddr || !mintAmount) return toast.error('Please provide recipient address and amount');
+    const toastId = toast.loading('Initiating mint transaction...');
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -96,19 +92,19 @@ const MockTokenPage = () => {
       const amountWei = ethers.parseUnits(mintAmount, tokenInfo.decimals);
       
       await mintToken(provider, signer, activeTokenAddr, toAddr, amountWei);
-      toast.success(`成功铸造 ${mintAmount} ${tokenInfo.symbol}`, { id: toastId });
+      toast.success(`Successfully minted ${mintAmount} ${tokenInfo.symbol}`, { id: toastId });
       setMintAmount('');
       handleQueryBalance(false);
     } catch (err) {
-      toast.error('铸造失败: ' + err.message, { id: toastId });
+      toast.error('Mint failed: ' + err.message, { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
   const handleBurn = async () => {
-    if (!burnAmount) return toast.error('请输入销毁数量');
-    const toastId = toast.loading('正在发起销毁交易...');
+    if (!burnAmount) return toast.error('Please enter amount to burn');
+    const toastId = toast.loading('Initiating burn transaction...');
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -116,11 +112,11 @@ const MockTokenPage = () => {
       const amountWei = ethers.parseUnits(burnAmount, tokenInfo.decimals);
       
       await burnToken(provider, signer, activeTokenAddr, amountWei);
-      toast.success(`成功销毁 ${burnAmount} ${tokenInfo.symbol}`, { id: toastId });
+      toast.success(`Successfully burned ${burnAmount} ${tokenInfo.symbol}`, { id: toastId });
       setBurnAmount('');
       handleQueryBalance(false);
     } catch (err) {
-      toast.error('销毁失败: ' + err.message, { id: toastId });
+      toast.error('Burn failed: ' + err.message, { id: toastId });
     } finally {
       setLoading(false);
     }
@@ -128,12 +124,11 @@ const MockTokenPage = () => {
 
   return (
     <div className="container" style={{maxWidth: 800}}>
-      <h2 style={{display:'flex', alignItems:'center', gap:10}}><Coins size={24} color="#FFD700"/> MockToken 管理</h2>
+      <h2 style={{display:'flex', alignItems:'center', gap:10}}><Coins size={24} color="#FFD700"/> MockToken Management</h2>
       
-      {/* 统一的 Token 选择器 */}
       <div className="data-card" style={{borderLeft: '4px solid #646cff', marginBottom: '20px'}}>
         <TokenInputSelector 
-          label="目标代币合约"
+          label="Target Token Contract"
           choice={tokenChoice}
           setChoice={setTokenChoice}
           customValue={tokenCustom}
@@ -141,7 +136,7 @@ const MockTokenPage = () => {
           tokenList={tokenList}
         />
         <button className="action-btn" onClick={() => handleQueryBalance(true)} disabled={loading}>
-          {loading ? '查询中...' : '同步合约详情'}
+          {loading ? 'Querying...' : 'Sync Contract Details'}
         </button>
       </div>
 
@@ -151,11 +146,11 @@ const MockTokenPage = () => {
             <div>
               <h3 style={{margin:0}}>{tokenInfo.name} ({tokenInfo.symbol})</h3>
               <div style={{fontSize:'0.85rem', color:'#888', marginTop:5}}>
-                余额: <span style={{color:'#646cff', fontWeight:'bold'}}>{parseFloat(balance).toLocaleString()}</span>
+                Balance: <span style={{color:'#646cff', fontWeight:'bold'}}>{parseFloat(balance).toLocaleString()}</span>
               </div>
             </div>
             <div style={{textAlign:'right', fontSize:'0.85rem', color:'#aaa'}}>
-              <div>权限状态: {isOwner ? <span style={{color:'#4ade80'}}>Owner</span> : <span style={{color:'#ef4444'}}>No Access</span>}</div>
+              <div>Permission Status: {isOwner ? <span style={{color:'#4ade80'}}>Owner</span> : <span style={{color:'#ef4444'}}>No Access</span>}</div>
               <div style={{fontSize:'0.7rem', opacity:0.6}}>{activeTokenAddr.slice(0,12)}...</div>
             </div>
           </div>
@@ -167,42 +162,40 @@ const MockTokenPage = () => {
           }}>
             {isOwner ? <CheckCircle size={16} color="#4ade80"/> : <XCircle size={16} color="#ef4444"/>}
             <span style={{color: isOwner ? '#4ade80' : '#ef4444'}}>
-              {isOwner ? '您可以进行铸造操作' : '您不是该代币的 Owner，铸造操作将会失败'}
+              {isOwner ? 'You are authorized to mint tokens.' : 'You are not the owner, minting will fail.'}
             </span>
           </div>
         </div>
       )}
 
       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:20}}>
-        {/* Mint Section */}
         <div className="data-card" style={{opacity: isOwner ? 1 : 0.6, border: isOwner ? '1px solid #4ade80' : '1px solid #333'}}>
-          <h4 style={{display:'flex', alignItems:'center', gap:8, color:'#4ade80'}}><Wallet size={18}/> 铸造 (Mint)</h4>
+          <h4 style={{display:'flex', alignItems:'center', gap:8, color:'#4ade80'}}><Wallet size={18}/> Mint</h4>
           <div className="input-group">
-            <label>接收者地址</label>
+            <label>Recipient Address</label>
             <div style={{display:'flex', gap:5}}>
               <input value={toAddr} onChange={e => setToAddr(e.target.value)} placeholder="0x..." />
               <button onClick={() => setToAddr(window.ethereum?.selectedAddress || '')} style={{padding:'0 10px'}}><User size={14}/></button>
             </div>
           </div>
           <div className="input-group">
-            <label>铸造数量</label>
+            <label>Mint Amount</label>
             <input type="number" value={mintAmount} onChange={e => setMintAmount(e.target.value)} placeholder="0.0" />
           </div>
           <button className="action-btn" onClick={handleMint} disabled={loading || !isOwner} style={{background: isOwner ? '#2e7d32' : '#333'}}>
-            确认铸造
+            Confirm Mint
           </button>
         </div>
 
-        {/* Burn Section */}
         <div className="data-card" style={{border: '1px solid #e63946'}}>
-          <h4 style={{display:'flex', alignItems:'center', gap:8, color:'#e63946'}}><Flame size={18}/> 销毁 (Burn)</h4>
+          <h4 style={{display:'flex', alignItems:'center', gap:8, color:'#e63946'}}><Flame size={18}/> Burn</h4>
           <div className="input-group">
-            <label>销毁数量</label>
+            <label>Burn Amount</label>
             <input type="number" value={burnAmount} onChange={e => setBurnAmount(e.target.value)} placeholder="0.0" />
           </div>
-          <p style={{fontSize:'0.75rem', color:'#888', marginBottom:15}}>* 销毁将永久减少总供应量</p>
+          <p style={{fontSize:'0.75rem', color:'#888', marginBottom:15}}>* Burning permanently reduces total supply</p>
           <button className="action-btn" onClick={handleBurn} disabled={loading || !tokenInfo} style={{background: '#b91c1c'}}>
-            确认销毁
+            Confirm Burn
           </button>
         </div>
       </div>
@@ -210,7 +203,7 @@ const MockTokenPage = () => {
       {!isOwner && tokenOwner && (
         <div style={{marginTop: 20, padding: 12, background: '#2a1810', border: '1px solid #f59e0b', borderRadius: 8, fontSize: '0.85rem', color: '#f59e0b', display:'flex', gap: 10}}>
           <AlertTriangle size={18} />
-          <div>该代币由地址 {tokenOwner.slice(0,8)}... 控制。如果您需要铸造权限，请在部署页发布自己的代币。</div>
+          <div>Token is controlled by {tokenOwner.slice(0,8)}... If you need minting permissions, please deploy your own token.</div>
         </div>
       )}
     </div>
