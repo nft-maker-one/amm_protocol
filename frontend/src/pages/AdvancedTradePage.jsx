@@ -32,10 +32,14 @@ const AdvancedTradePage = () => {
   const [tokenList, setTokenList] = useState(getTokenList());
   const [loading, setLoading] = useState(false);
   
+  // Token 选择状态
+  const [tokenInChoice, setTokenInChoice] = useState('0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14'); // WETH
+  const [tokenInCustom, setTokenInCustom] = useState('');
+  const [tokenOutChoice, setTokenOutChoice] = useState('0x779877A7B0D9E8603169DdbD7836e478b4624789'); // LINK
+  const [tokenOutCustom, setTokenOutCustom] = useState('');
+  
   // 路由测试状态
   const [selectedChain, setSelectedChain] = useState(11155111); // 默认 Sepolia
-  const [routeTokenIn, setRouteTokenIn] = useState('');
-  const [routeTokenOut, setRouteTokenOut] = useState('');
   const [routeAmount, setRouteAmount] = useState('');
   const [maxHops, setMaxHops] = useState('3');
   const [slippageTolerance, setSlippageTolerance] = useState('0.5');
@@ -52,7 +56,12 @@ const AdvancedTradePage = () => {
   // --- 路由测试逻辑 (核心) ---
   const handleTestAdvancedRouting = async () => {
     if (!window.ethereum) return toast.error('请先连接钱包');
-    if (!ethers.isAddress(routeTokenIn) || !ethers.isAddress(routeTokenOut)) return toast.error('代币地址无效');
+    
+    // 从选择状态推导最终地址
+    const finalTokenIn = tokenInChoice === 'custom' ? tokenInCustom : tokenInChoice;
+    const finalTokenOut = tokenOutChoice === 'custom' ? tokenOutCustom : tokenOutChoice;
+    
+    if (!ethers.isAddress(finalTokenIn) || !ethers.isAddress(finalTokenOut)) return toast.error('代币地址无效');
     if (!routeAmount || parseFloat(routeAmount) <= 0) return toast.error('交易金额无效');
 
     setRoutingLoading(true);
@@ -69,7 +78,7 @@ const AdvancedTradePage = () => {
 
       // 阶段1: 路径发现
       const startTime = Date.now();
-      const allRoutes = await router.generatePossibleRoutes(routeTokenIn, routeTokenOut, maxHopsNum);
+      const allRoutes = await router.generatePossibleRoutes(finalTokenIn, finalTokenOut, maxHopsNum);
       const discoveryTime = Date.now() - startTime;
 
       if (allRoutes.length === 0) {
