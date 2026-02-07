@@ -6,7 +6,8 @@ import "../src/MockToken.sol";
 
 contract DeployTokensScript is Script {
     function run() external {
-        vm.startBroadcast();
+        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
+        vm.startBroadcast(deployerKey);
 
         console.log("=== Deploying ERC20 Tokens ===");
         console.log("Deployer address:", msg.sender);
