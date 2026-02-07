@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 import { findTokenByAddress } from '../api/tokens';
-import { getPoolList } from '../api/pools';
+import { getPoolList, getFilteredPoolList } from '../api/pools';
 // 1. 引入统一组件
 import PoolInfoCard from '../components/ui/PoolInfoCard';
 import {
@@ -85,7 +85,7 @@ const AnalyticsPage = () => {
 
   // 初始化加载
   useEffect(() => {
-    const list = getPoolList();
+    const list = getFilteredPoolList();
     setPoolList(list);
     // 默认选中第一个池子并自动加载数据
     if (list.length > 0 && !selectedPool) {

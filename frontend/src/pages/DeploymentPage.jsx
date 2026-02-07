@@ -6,7 +6,7 @@ import {
   Terminal, Info, Eye, Trash2 
 } from 'lucide-react';
 
-import { getPoolList, updatePoolInList, addPoolToList } from '../api/pools';
+import { getPoolList, getFilteredPoolList, updatePoolInList, addPoolToList } from '../api/pools';
 import PoolSelector from '../components/ui/PoolSelector';
 import TokenInputSelector from '../components/ui/TokenInputSelector';
 import PoolInfoCard from '../components/ui/PoolInfoCard';
@@ -22,7 +22,7 @@ const DeploymentPage = () => {
   const [loading, setLoading] = useState(false);
   const [selectedPool, setSelectedPoolState] = useState(null);
   const [tokenList, setTokenList] = useState(getTokenList());
-  const [poolList, setPoolList] = useState(getPoolList());
+  const [poolList, setPoolList] = useState(getFilteredPoolList());
 
   // Factory State
   const [factoryAddresses, setFactoryAddresses] = useState([]);
@@ -75,14 +75,48 @@ const DeploymentPage = () => {
       const provider = new ethers.BrowserProvider(window.ethereum);
       await ensureSepolia(provider);
       const signer = await provider.getSigner();
+      const signerAddress = await signer.getAddress();
+      console.log(`[部署] 开始部署 Token: ${tokenName} (${tokenSymbol})`);
+      console.log(`[部署] 部署者地址: ${signerAddress}`);
+      
       const result = await deployToken(provider, signer, TOKEN_BYTECODE, tokenName, tokenSymbol, 18, '1000000');
+      console.log(`[部署] Token 部署成功: ${result.address}`);
+      
       addCustomToken({ symbol: tokenSymbol, address: result.address, decimalsHint: 18, isCustom: true });
       setTokenList(getTokenList());
-      toast.success('Token 部署成功！', { id: toastId });
-      setTokenName(''); setTokenSymbol('');
+      toast.success(
+        <div>
+          <b>Token 部署成功！</b><br/>
+          <span style={{fontSize:'0.8rem', fontFamily:'monospace'}}>{result.address}</span><br/>
+          <span style={{fontSize:'0.75rem', color:'#aaa'}}>请在 Sepolia Etherscan 上验证合约</span>
+        </div>, 
+        { id: toastId }
+      );
+      setTokenName(''); 
+      setTokenSymbol('');
     } catch (err) {
-      toast.error('部署失败: ' + err.message, { id: toastId });
-    } finally { setLoading(false); }
+      console.error('[部署失败]', err);
+      let errorMsg = err.message;
+      
+      // 提供更详细的错误提示
+      if (errorMsg.includes('bytecode')) {
+        errorMsg = 'TOKEN_BYTECODE 未配置或无效。请检查 .env.local 文件中的 VITE_TOKEN_BYTECODE 是否存在且正确';
+      } else if (errorMsg.includes('insufficient funds')) {
+        errorMsg = 'Sepolia 测试网 ETH 不足。请从水龙头获取测试 ETH: https://sepoliafaucet.com';
+      } else if (errorMsg.includes('transaction failed')) {
+        errorMsg = '交易执行失败。可能是网络拥堵或 bytecode 无效';
+      }
+      
+      toast.error(
+        <div>
+          <b>部署失败</b><br/>
+          <span style={{fontSize:'0.8rem'}}>{errorMsg}</span>
+        </div>, 
+        { id: toastId, duration: 5000 }
+      );
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   // 2. 创建 Pool 逻辑
@@ -106,7 +140,7 @@ const DeploymentPage = () => {
         fee: createFee, isInitialized: false
       };
       addPoolToList(poolObj);
-      setPoolList(getPoolList());
+      setPoolList(getFilteredPoolList());
       setSelectedPoolState(poolObj);
       toast.success('创建成功，去初始化吧！', { id: toastId });
       setTimeout(() => setActiveTab('pool'), 1000);
@@ -125,7 +159,7 @@ const DeploymentPage = () => {
       const signer = await provider.getSigner();
       await initializePool(provider, signer, selectedPool.address, BigInt(poolSqrtPriceX96));
       updatePoolInList(selectedPool.address, { isInitialized: true, sqrtPriceX96: poolSqrtPriceX96 });
-      setPoolList(getPoolList());
+      setPoolList(getFilteredPoolList());
       toast.success('初始化成功！', { id: toastId });
     } catch (err) {
       toast.error('失败: ' + err.message, { id: toastId });

@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { X, Info, AlertTriangle, ArrowRight } from 'lucide-react';
 
 import { findTokenByAddress } from '../api/tokens';
-import { getPoolList } from '../api/pools'; // 确保这里引用正确
+import { getPoolList, getFilteredPoolList } from '../api/pools'; // 确保这里引用正确
 import PoolInfoCard from '../components/ui/PoolInfoCard'; // 引入统一组件
 import {
   AMMPOOL_ADDRESS,
@@ -61,7 +61,7 @@ const LiquidityPage = () => {
 
   // 初始化加载池子列表
   useEffect(() => {
-    const list = getPoolList();
+    const list = getFilteredPoolList();
     setPoolList(list);
     // 如果有池子且未选择，默认选第一个
     if (list.length > 0 && !selectedPool) {
