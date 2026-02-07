@@ -1,19 +1,14 @@
-/* src/index.css */
-
-/* 1. 强制重置根元素和 Body 的布局 */
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   
-  /* 定义颜色变量 */
   --primary: #646cff;
   --bg-dark: #1a1a1a;
   --card-bg: #242424;
   --text-light: rgba(255, 255, 255, 0.87);
 }
 
-/* 关键修复：让 HTML 和 Body 占满全屏，且不做 Flex 居中 */
 html, body {
   margin: 0;
   padding: 0;
@@ -23,16 +18,14 @@ html, body {
   color: var(--text-light);
 }
 
-/* 关键修复：React 的挂载点 #root 必须占满宽度 */
 #root {
   width: 100%;
   margin: 0 auto;
-  text-align: left; /* 防止文字默认居中 */
+  text-align: left;
 }
 
-/* 2. 导航栏样式 */
 .navbar {
-  position: sticky; /* 这是一个优化：让导航栏吸顶 */
+  position: sticky;
   top: 0;
   z-index: 100;
   display: flex;
@@ -81,12 +74,14 @@ html, body {
   font-weight: 600;
   transition: background-color 0.3s;
 }
-.connect-btn:hover { background-color: #535bf2; }
 
-/* 3. 内容容器样式 (这里负责居中) */
+.connect-btn:hover {
+  background-color: #535bf2;
+}
+
 .container {
-  max-width: 800px;     /* 限制最大宽度 */
-  margin: 3rem auto;    /* 上下边距3rem，左右自动(即居中) */
+  max-width: 800px;
+  margin: 3rem auto;
   padding: 2rem;
   background-color: var(--card-bg);
   border-radius: 12px;
@@ -94,11 +89,23 @@ html, body {
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
 }
 
-/* 4. 其他通用样式 */
-h2 { margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px; }
+h2 {
+  margin-top: 0;
+  border-bottom: 1px solid #444;
+  padding-bottom: 10px;
+  margin-bottom: 20px;
+}
 
-.input-group { margin-bottom: 1.5rem; }
-label { display: block; margin-bottom: 0.5rem; color: #aaa; font-size: 0.9rem; }
+.input-group {
+  margin-bottom: 1.5rem;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #aaa;
+  font-size: 0.9rem;
+}
 
 input, select {
   width: 100%;
@@ -108,9 +115,13 @@ input, select {
   background: #111;
   color: white;
   font-size: 1rem;
-  box-sizing: border-box; /* 极其重要：防止padding撑大盒子 */
+  box-sizing: border-box;
 }
-input:focus, select:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+input:focus, select:focus {
+  outline: 2px solid var(--primary);
+  border-color: transparent;
+}
 
 .action-btn {
   width: 100%;
@@ -125,7 +136,10 @@ input:focus, select:focus { outline: 2px solid var(--primary); border-color: tra
   font-weight: bold;
   transition: transform 0.1s;
 }
-.action-btn:active { transform: scale(0.98); }
+
+.action-btn:active {
+  transform: scale(0.98);
+}
 
 .data-card {
   background: #151515;
@@ -135,7 +149,6 @@ input:focus, select:focus { outline: 2px solid var(--primary); border-color: tra
   border: 1px solid #333;
 }
 
-/* Modal 样式 */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -249,4 +262,16 @@ input:focus, select:focus { outline: 2px solid var(--primary); border-color: tra
 .modal-cancel-btn:hover {
   background-color: #555;
   transform: translateY(-2px);
+}
+
+.nav-links a {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nav-links a.active button {
+  color: var(--primary);
+  font-weight: bold;
+  background-color: rgba(100, 108, 255, 0.1);
 }
