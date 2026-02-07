@@ -147,8 +147,8 @@ const DeploymentPage = () => {
       <div style={{display: 'flex', gap: '10px', marginBottom: '25px', background: '#1a1a1a', padding: 5, borderRadius: 10}}>
         <TabButton id="factory" label="Factory" icon={Layers} />
         <TabButton id="token" label="Token" icon={Code} />
-        <TabButton id="create-pool" label="Create" icon={PlusCircle} />
-        <TabButton id="pool" label="Initialize" icon={PlayCircle} />
+        <TabButton id="create-pool" label="Create Pool" icon={PlusCircle} />
+        <TabButton id="pool" label="Initialize Pool" icon={PlayCircle} />
       </div>
 
       {activeTab === 'factory' && (

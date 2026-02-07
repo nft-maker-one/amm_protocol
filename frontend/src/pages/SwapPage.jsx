@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
-import { X, ArrowDown, Wrench, RefreshCw } from 'lucide-react';
-
-import AMMPoolABI from '../api/abi/AMMPool.json';
+import { X, ArrowDown } from 'lucide-react';
 import { getTokenList, TOKENS, findTokenByAddress } from '../api/tokens';
 import { getPoolList, updatePoolInList } from '../api/pools';
 import TokenInputSelector from '../components/ui/TokenInputSelector';
@@ -22,15 +20,6 @@ import {
   createPool, 
   simulateCreatePool,
 } from '../api/amm';
-
-// --- Helper: 安全调用 View 函数 ---
-async function safeCallView(provider, address, abi, fnName, args = []) {
-  const iface = new ethers.Interface(abi);
-  const data = iface.encodeFunctionData(fnName, args);
-  const res = await provider.call({ to: address, data });
-  if (!res || res === '0x') throw new Error(`${fnName} 返回空数据`);
-  return iface.decodeFunctionResult(fnName, res);
-}
 
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
@@ -55,7 +44,9 @@ const SwapPage = () => {
   const [selectedPool, setSelectedPool] = useState(null);
   const [tokenAChoice, setTokenAChoice] = useState(TOKENS.USDT.address);
   const [tokenACustom, setTokenACustom] = useState('');
+  const [feeInput, setFeeInput] = useState('3000');
   const [payAmount, setPayAmount] = useState('');
+  const [slippagePct, setSlippagePct] = useState('1.0');
   const [estOutInfo, setEstOutInfo] = useState(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [pendingTx, setPendingTx] = useState(null);
@@ -69,9 +60,6 @@ const SwapPage = () => {
       setSelectedPool(latestPools[0]);
     }
   }, []);
-
-  const tokenA = tokenAChoice === 'custom' ? tokenACustom : tokenAChoice;
-  const tokenB = tokenBChoice === 'custom' ? tokenBCustom : tokenBChoice;
 
   // --- Swap 检查 ---
   const handleSwapCheck = async () => {
@@ -133,10 +121,6 @@ const SwapPage = () => {
       <div style={{marginBottom:20}}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
            <label style={{fontSize:'0.9rem', color:'#888'}}>当前交易对</label>
-           {/* 加个刷新按钮显得更专业 */}
-           <button onClick={() => setPoolList(getPoolList())} style={{background:'none', border:'none', color:'#666', cursor:'pointer', display:'flex', alignItems:'center', gap:4, fontSize:'0.8rem'}}>
-             <RefreshCw size={12}/> 刷新列表
-           </button>
         </div>
         
         {selectedPool ? (
@@ -193,27 +177,6 @@ const SwapPage = () => {
       <button className="action-btn" style={{marginTop:20, height:55, borderRadius:16, fontSize:18}} onClick={handleSwapCheck} disabled={swapping}>
         {swapping ? '正在计算最佳报价...' : '🚀 立即兑换'}
       </button>
-
-      {/* 开发者工具 */}
-      <div style={{marginTop: 40, borderTop: '1px solid #333', paddingTop: 15}}>
-        <div style={{fontSize: '0.8rem', color: '#666', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 5}}>
-          <Wrench size={12}/> 开发者调试工具
-        </div>
-        <div style={{display: 'flex', gap: 10}}>
-          <button 
-            onClick={handleReadSlot0}
-            style={{flex: 1, padding: '8px', background: 'transparent', border: '1px solid #444', color: '#888', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem'}}
-          >
-            读取当前 Pool Slot0
-          </button>
-          <button 
-            onClick={handleQuerySlot0}
-            style={{flex: 1, padding: '8px', background: 'transparent', border: '1px solid #444', color: '#888', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem'}}
-          >
-            查询全局 Slot0 (Debug)
-          </button>
-        </div>
-      </div>
 
       {/* Modals */}
       <Modal isOpen={isPoolModalOpen} onClose={() => setIsPoolModalOpen(false)} title="选择交易对">
