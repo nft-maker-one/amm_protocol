@@ -1,6 +1,7 @@
 // Pool management functionality
 import { ethers } from 'ethers';
 import { getPool, readSlot0 } from './amm';
+import { getTokenList } from './tokens';
 
 // Local storage keys
 const POOL_LIST_KEY = 'amm_pool_list';
@@ -16,6 +17,26 @@ export const getPoolList = () => {
   } catch {
     return [];
   }
+};
+
+/**
+ * Get filtered pool list - only includes pools where both tokens exist in the current token list
+ */
+export const getFilteredPoolList = () => {
+  const pools = getPoolList();
+  const tokenList = getTokenList();
+  
+  // Create a set of valid token addresses for quick lookup
+  const validTokenAddresses = new Set(
+    tokenList.map(t => t.address.toLowerCase())
+  );
+  
+  // Filter pools: keep only those where both token0 and token1 are valid
+  return pools.filter(pool => {
+    const token0Valid = validTokenAddresses.has(pool.token0.toLowerCase());
+    const token1Valid = validTokenAddresses.has(pool.token1.toLowerCase());
+    return token0Valid && token1Valid;
+  });
 };
 
 export const savePoolList = (pools) => {

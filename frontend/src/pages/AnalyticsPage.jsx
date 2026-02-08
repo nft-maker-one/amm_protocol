@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 
 import { findTokenByAddress } from '../api/tokens';
-import { getPoolList } from '../api/pools';
+import { getPoolList, getFilteredPoolList } from '../api/pools';
+// 1. 引入统一组件
 import PoolInfoCard from '../components/ui/PoolInfoCard';
 import {
   ensureSepolia,
@@ -78,7 +79,7 @@ const AnalyticsPage = () => {
   const [swapDirection, setSwapDirection] = useState(true);
 
   useEffect(() => {
-    const list = getPoolList();
+    const list = getFilteredPoolList();
     setPoolList(list);
     if (list.length > 0 && !selectedPool) {
       handlePoolSelect(list[0]);

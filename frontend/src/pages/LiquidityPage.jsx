@@ -4,8 +4,8 @@ import toast from 'react-hot-toast';
 import { X, AlertTriangle } from 'lucide-react';
 
 import { findTokenByAddress } from '../api/tokens';
-import { getPoolList } from '../api/pools';
-import PoolInfoCard from '../components/ui/PoolInfoCard';
+import { getPoolList, getFilteredPoolList } from '../api/pools'; // 确保这里引用正确
+import PoolInfoCard from '../components/ui/PoolInfoCard'; // 引入统一组件
 import {
   AMMPOOL_ADDRESS,
   ensureSepolia,
@@ -58,7 +58,7 @@ const LiquidityPage = () => {
   const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
 
   useEffect(() => {
-    const list = getPoolList();
+    const list = getFilteredPoolList();
     setPoolList(list);
     if (list.length > 0 && !selectedPool) {
       handlePoolSelect(list[0]);

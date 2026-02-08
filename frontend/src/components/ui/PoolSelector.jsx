@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { getPoolList, getSelectedPool, setSelectedPool, getPoolDisplayName, refreshPoolStatus } from "../../api/pools";
+import { getPoolList, getFilteredPoolList, getSelectedPool, setSelectedPool, getPoolDisplayName, refreshPoolStatus } from "../../api/pools";
 import { ensureSepolia } from "../../api/amm";
 
 const PoolSelector = ({ onPoolSelect, selectedPool, allowEmpty = false, showCreateButton = false, onCreateNew }) => {
@@ -12,7 +12,7 @@ const PoolSelector = ({ onPoolSelect, selectedPool, allowEmpty = false, showCrea
   }, []);
 
   const loadPools = () => {
-    const poolList = getPoolList();
+    const poolList = getFilteredPoolList();
     setPools(poolList);
     
     if (!selectedPool && poolList.length > 0) {

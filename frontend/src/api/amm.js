@@ -51,6 +51,13 @@ export async function simulateCreatePool(provider, signer, tokenA, tokenB, fee) 
 }
 
 export async function createPool(provider, signer, tokenA, tokenB, fee) {
+  // 验证费用值
+  const VALID_FEES = [500, 3000, 10000];
+  const feeNum = Number(fee);
+  if (!VALID_FEES.includes(feeNum)) {
+    throw new Error(`Invalid fee: ${fee}. Allowed fees are: ${VALID_FEES.join(', ')}`);
+  }
+  
   const factoryWithSigner = getFactory(provider).connect(signer);
   const tx = await factoryWithSigner.createPool(tokenA, tokenB, fee);
   await tx.wait();
@@ -690,12 +697,23 @@ export async function deployFactory(provider, signer, factoryBytecode) {
  * @param {string} name - Token name
  * @param {string} symbol - Token symbol
  * @param {number} decimals - Token decimals (e.g., 18)
- * @param {string} initialSupply - Initial supply (as string, e.g., "1000000")
+ * @param {string} initialSupply - Initial supply in base units (e.g., "1000000" = 1M tokens if decimals=18, this will become 1M * 10^18)
  * @returns {Promise<{address: string, tx: ethers.TransactionResponse}>}
  */
 export async function deployToken(provider, signer, tokenBytecode, name, symbol, decimals, initialSupply) {
   if (!tokenBytecode || tokenBytecode === '0x') {
     throw new Error('Token bytecode is required. Please compile the contract first.');
+  }
+  
+  // 验证输入参数
+  if (!name || !symbol) {
+    throw new Error('Token name and symbol are required');
+  }
+  if (decimals < 0 || decimals > 18) {
+    throw new Error('Decimals must be between 0 and 18');
+  }
+  if (!initialSupply || initialSupply === '0') {
+    throw new Error('Initial supply must be greater than 0');
   }
   
   // MockToken constructor: (string memory name, string memory symbol, uint8 decimals_, uint256 initialSupply)
@@ -713,15 +731,46 @@ export async function deployToken(provider, signer, tokenBytecode, name, symbol,
     }
   ];
   
-  const factory = new ethers.ContractFactory(MockTokenConstructorABI, tokenBytecode, signer);
-  const contract = await factory.deploy(name, symbol, decimals, initialSupply);
-  await contract.waitForDeployment();
-  const address = await contract.getAddress();
+  console.log('🔄 [deployToken] 开始部署 Token:');
+  console.log('  名称:', name);
+  console.log('  符号:', symbol);
+  console.log('  小数位:', decimals);
+  console.log('  初始供应量:', initialSupply);
   
-  return {
-    address,
-    tx: contract.deploymentTransaction()
-  };
+  const factory = new ethers.ContractFactory(MockTokenConstructorABI, tokenBytecode, signer);
+  
+  // 验证bytecode不为空
+  if (!factory.bytecode || factory.bytecode === '0x') {
+    throw new Error('Failed to parse token bytecode. Please ensure VITE_TOKEN_BYTECODE is correctly set in .env.local');
+  }
+  
+  let deployTx;
+  try {
+    console.log('  ⏳ 正在发送部署交易...');
+    const contract = await factory.deploy(name, symbol, decimals, BigInt(initialSupply));
+    console.log('  ⏳ 等待部署确认...');
+    deployTx = contract.deploymentTransaction();
+    console.log('  📝 交易哈希:', deployTx?.hash);
+    
+    await contract.waitForDeployment();
+    const address = await contract.getAddress();
+    
+    console.log('  ✅ Token 部署成功!');
+    console.log('  📍 合约地址:', address);
+    
+    return {
+      address,
+      tx: deployTx
+    };
+  } catch (err) {
+    console.error('  ❌ Token 部署失败:', err.message);
+    if (err.message.includes('insufficient funds')) {
+      throw new Error('部署失败：账户余额不足。请确保你的账户在 Sepolia 测试网中有足够的 ETH');
+    } else if (err.message.includes('transaction failed')) {
+      throw new Error('部署失败：交易执行失败。这可能是因为 bytecode 无效或网络问题');
+    }
+    throw err;
+  }
 }
 
 /**

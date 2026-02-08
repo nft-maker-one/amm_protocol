@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import { X, ArrowDown } from 'lucide-react';
 import { getTokenList, TOKENS, findTokenByAddress } from '../api/tokens';
-import { getPoolList, updatePoolInList } from '../api/pools';
+import { getPoolList, getFilteredPoolList, updatePoolInList } from '../api/pools';
 import TokenInputSelector from '../components/ui/TokenInputSelector';
 import PoolInfoCard from '../components/ui/PoolInfoCard';
 import {
@@ -36,7 +36,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 
 const SwapPage = () => {
   const [tokenList, setTokenList] = useState(getTokenList());
-  const [poolList, setPoolList] = useState(getPoolList());
+  const [poolList, setPoolList] = useState(getFilteredPoolList());
   const [isPoolModalOpen, setIsPoolModalOpen] = useState(false);
   
   const [selectedPool, setSelectedPool] = useState(null);
@@ -51,7 +51,7 @@ const SwapPage = () => {
   const [swapping, setSwapping] = useState(false);
 
   useEffect(() => {
-    const latestPools = getPoolList();
+    const latestPools = getFilteredPoolList();
     setPoolList(latestPools);
     setTokenList(getTokenList());
     if (latestPools.length > 0 && !selectedPool) {
