@@ -7,7 +7,7 @@ import ERC20ABI from './abi/ERC20.json';
 // Your deployed pool on Sepolia (initialized)
 export const AMMPOOL_ADDRESS = '0x0a0cba1059BE0867AA858e37E4459862Ef40b8d7';
 export const FACTORY_ADDRESS = '0x79A1219d4aA0E7E9bcE45c2CbC17e34C50b3B915';
-export const AMMFACTORY_ADDRESS = FACTORY_ADDRESS; // 别名，用于routing
+export const AMMFACTORY_ADDRESS = FACTORY_ADDRESS; // Alias for routing
 
 // TickMath constants (copied from contracts/src/libraries/TickMath.sol)
 export const MIN_SQRT_RATIO = 4295128739n;
@@ -15,14 +15,14 @@ export const MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342n
 
 export async function ensureSepolia(provider) {
   const network = await provider.getNetwork();
-  if (Number(network.chainId) !== 11155111) throw new Error('请切换 MetaMask 到 Sepolia 测试网');
+  if (Number(network.chainId) !== 11155111) throw new Error('Please switch MetaMask to Sepolia testnet');
 }
 
 export async function safeCallView(provider, address, abi, fnName, args = []) {
   const iface = new ethers.Interface(abi);
   const data = iface.encodeFunctionData(fnName, args);
   const res = await provider.call({ to: address, data });
-  if (!res || res === '0x') throw new Error(`${fnName} 返回空数据，函数可能在该合约上不存在或地址不正确`);
+  if (!res || res === '0x') throw new Error(`${fnName} returned empty data. Function may not exist on this contract or address is incorrect`);
   return iface.decodeFunctionResult(fnName, res);
 }
 
@@ -51,7 +51,7 @@ export async function simulateCreatePool(provider, signer, tokenA, tokenB, fee) 
 }
 
 export async function createPool(provider, signer, tokenA, tokenB, fee) {
-  // 验证费用值
+  // Validate fee value
   const VALID_FEES = [500, 3000, 10000];
   const feeNum = Number(fee);
   if (!VALID_FEES.includes(feeNum)) {
@@ -88,11 +88,11 @@ export async function mintToken(provider, signer, tokenAddr, toAddr, amount) {
       isOwner = owner.toLowerCase() === signerAddr.toLowerCase();
       
       if (!isOwner) {
-        throw new Error(`只有合约 owner (${owner}) 才能铸造代币。当前地址: ${signerAddr}`);
+        throw new Error(`Only contract owner (${owner}) can mint tokens. Current address: ${signerAddr}`);
       }
     } catch (err) {
       // If owner() function doesn't exist, it might not be a MockToken
-      console.warn('无法检查 owner，可能不是 MockToken 合约:', err.message);
+      console.warn('Unable to check owner, may not be a MockToken contract:', err.message);
     }
     
     const tokenWithSigner = token.connect(signer);
@@ -103,9 +103,9 @@ export async function mintToken(provider, signer, tokenAddr, toAddr, amount) {
     if (error.message.includes('owner')) {
       throw error; // Re-throw owner-related errors as-is
     } else if (error.code === 'CALL_EXCEPTION') {
-      throw new Error('合约调用失败。可能原因：1) 您不是合约 owner，2) 合约地址错误，3) 参数无效');
+      throw new Error('Contract call failed. Possible reasons: 1) You are not the contract owner, 2) Invalid contract address, 3) Invalid parameters');
     } else {
-      throw new Error(`铸造失败: ${error.message}`);
+      throw new Error(`Minting failed: ${error.message}`);
     }
   }
 }
@@ -144,13 +144,13 @@ export function getErc20Contract(providerOrSigner, tokenAddr) {
 }
 
 /**
- * 诊断函数：检查 Pool 的所有关键状态
+ * Diagnostic function: Check all critical states of the Pool
  */
 export async function diagnosePool(provider, poolAddr) {
   try {
     const pool = getPoolContract(provider, poolAddr);
     
-    // 读取所有关键状态
+    // Read all critical states
     const [slot0, token0, token1, fee, tickSpacing, liquidity] = await Promise.all([
       pool.slot0(),
       pool.token0(),
@@ -173,16 +173,15 @@ export async function diagnosePool(provider, poolAddr) {
       status: slot0.sqrtPriceX96 === 0n ? 'NOT_INITIALIZED' : 'INITIALIZED',
     };
 
-    console.log('[diagnosePool] Pool 诊断结果:', diagnosis);
     return diagnosis;
   } catch (err) {
-    console.error('[diagnosePool] 诊断失败:', err);
+    console.error('[diagnosePool] Diagnosis failed:', err);
     throw err;
   }
 }
 
 /**
- * 预检查 mint 参数是否有效
+ * Pre-check if mint parameters are valid
  */
 export async function validateMintParams(provider, poolAddr, tickLower, tickUpper, liquidityAmount) {
   const pool = getPoolContract(provider, poolAddr);
@@ -194,42 +193,42 @@ export async function validateMintParams(provider, poolAddr, tickLower, tickUppe
   const errors = [];
   const warnings = [];
 
-  // 检查 Pool 初始化
+  // Check Pool initialization
   if (slot0.sqrtPriceX96 === 0n) {
-    errors.push('Pool 未初始化 (sqrtPriceX96 = 0)');
+    errors.push('Pool not initialized (sqrtPriceX96 = 0)');
   }
 
-  // 检查基本范围
+  // Check basic range
   if (tickLower >= tickUpper) {
-    errors.push(`tickLower (${tickLower}) 必须小于 tickUpper (${tickUpper})`);
+    errors.push(`tickLower (${tickLower}) must be less than tickUpper (${tickUpper})`);
   }
 
-  // 检查 tick 范围（TickMath 的限制）
+  // Check tick range (TickMath limits)
   if (tickLower < -887272) {
-    errors.push(`tickLower (${tickLower}) 低于最小值 -887272`);
+    errors.push(`tickLower (${tickLower}) is below minimum -887272`);
   }
   if (tickUpper > 887272) {
-    errors.push(`tickUpper (${tickUpper}) 超过最大值 887272`);
+    errors.push(`tickUpper (${tickUpper}) exceeds maximum 887272`);
   }
 
-  // 检查 tickSpacing 对齐
+  // Check tickSpacing alignment
   const tickSpacingNum = Number(tickSpacing);
   if (tickLower % tickSpacingNum !== 0) {
-    errors.push(`tickLower (${tickLower}) 不是 tickSpacing (${tickSpacingNum}) 的倍数`);
+    errors.push(`tickLower (${tickLower}) must be multiple of tickSpacing (${tickSpacingNum})`);
   }
   if (tickUpper % tickSpacingNum !== 0) {
-    errors.push(`tickUpper (${tickUpper}) 不是 tickSpacing (${tickSpacingNum}) 的倍数`);
+    errors.push(`tickUpper (${tickUpper}) must be multiple of tickSpacing (${tickSpacingNum})`);
   }
 
-  // 检查流动性
+  // Check liquidity
   if (liquidityAmount <= 0n) {
-    errors.push(`流动性数量必须大于 0，当前值: ${liquidityAmount.toString()}`);
+    errors.push(`Liquidity amount must be greater than 0, current value: ${liquidityAmount.toString()}`);
   }
 
-  // 当前 tick 检查
+  // Current tick check
   const currentTick = Number(slot0.tick);
   if (currentTick < tickLower || currentTick > tickUpper) {
-    warnings.push(`警告: 当前 tick (${currentTick}) 在范围 [${tickLower}, ${tickUpper}] 之外`);
+    warnings.push(`Warning: current tick (${currentTick}) is outside range [${tickLower}, ${tickUpper}]`);
   }
 
   return {
@@ -250,22 +249,15 @@ export async function validateMintParams(provider, poolAddr, tickLower, tickUppe
  * Returns { amount0, amount1 } as BigInt.
  */
 /**
- * 离链计算添加流动性所需的代币数量
- * 这个函数不依赖于 staticCall，因此不需要用户先有足够的代币余额
- * 算法基于 Uniswap V3 的公式
+ * Off-chain calculation of required token amounts for adding liquidity
+ * This function does not depend on staticCall, so users don't need to have sufficient token balance first
+ * Algorithm based on Uniswap V3 formula
  */
 export async function quoteMint(provider, poolAddr, recipient, tickLower, tickUpper, liquidityAmount) {
-  console.log('🔥🔥🔥 [quoteMint v3.0 离链计算版] 开始报价 🔥🔥🔥');
-  console.log('  poolAddr:', poolAddr);
-  console.log('  tickLower:', tickLower);
-  console.log('  tickUpper:', tickUpper);
-  console.log('  liquidityAmount:', liquidityAmount.toString());
-
   const pool = getPoolContract(provider, poolAddr);
   
   try {
-    // 读取 pool 信息
-    console.log('[quoteMint] 读取 Pool 信息...');
+    // Read pool information
     const [slot0, tickSpacing, token0, token1] = await Promise.all([
       pool.slot0(),
       pool.tickSpacing(),
@@ -276,82 +268,60 @@ export async function quoteMint(provider, poolAddr, recipient, tickLower, tickUp
     const sqrtPriceX96 = slot0.sqrtPriceX96;
     const currentTick = Number(slot0.tick);
     const tickSpacingNum = Number(tickSpacing);
-    
-    console.log('[quoteMint] Pool 状态:');
-    console.log('  - sqrtPriceX96:', sqrtPriceX96.toString());
-    console.log('  - currentTick:', currentTick);
-    console.log('  - tickSpacing:', tickSpacingNum);
-    console.log('  - token0:', token0);
-    console.log('  - token1:', token1);
 
-    // 检查初始化
+    // Check initialization
     if (sqrtPriceX96 === 0n) {
-      throw new Error('Pool 未初始化 (sqrtPriceX96 = 0)');
+      throw new Error('Pool not initialized (sqrtPriceX96 = 0)');
     }
 
-    // 验证 tick 对齐
+    // Validate tick alignment
     if (tickLower % tickSpacingNum !== 0) {
-      throw new Error(`tickLower ${tickLower} 必须是 tickSpacing ${tickSpacingNum} 的倍数`);
+      throw new Error(`tickLower ${tickLower} must be a multiple of tickSpacing ${tickSpacingNum}`);
     }
     if (tickUpper % tickSpacingNum !== 0) {
-      throw new Error(`tickUpper ${tickUpper} 必须是 tickSpacing ${tickSpacingNum} 的倍数`);
+      throw new Error(`tickUpper ${tickUpper} must be a multiple of tickSpacing ${tickSpacingNum}`);
     }
     if (tickLower >= tickUpper) {
-      throw new Error(`tickLower ${tickLower} 必须小于 tickUpper ${tickUpper}`);
+      throw new Error(`tickLower ${tickLower} must be less than tickUpper ${tickUpper}`);
     }
 
-    console.log('✅ 参数验证通过，开始离链计算...');
-
-    // 使用离链计算公式 (Uniswap V3 style)
+    // Use off-chain calculation formula (Uniswap V3 style)
     const sqrtRatioAX96 = getSqrtRatioAtTick(tickLower);
     const sqrtRatioBX96 = getSqrtRatioAtTick(tickUpper);
-    
-    console.log('  - sqrtRatioAX96 (tickLower):', sqrtRatioAX96.toString());
-    console.log('  - sqrtRatioBX96 (tickUpper):', sqrtRatioBX96.toString());
     
     let amount0 = 0n;
     let amount1 = 0n;
     const liquidity = BigInt(liquidityAmount);
 
     if (sqrtPriceX96 < sqrtRatioAX96) {
-      // 当前价格低于范围，只需要 token0
       amount0 = getAmount0ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity);
-      console.log('  当前价格低于范围，只需 token0');
     } else if (sqrtPriceX96 < sqrtRatioBX96) {
-      // 当前价格在范围内，需要两种代币
       amount0 = getAmount0ForLiquidity(sqrtPriceX96, sqrtRatioBX96, liquidity);
       amount1 = getAmount1ForLiquidity(sqrtRatioAX96, sqrtPriceX96, liquidity);
-      console.log('  当前价格在范围内，需要两种代币');
     } else {
-      // 当前价格高于范围，只需要 token1
       amount1 = getAmount1ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity);
-      console.log('  当前价格高于范围，只需 token1');
     }
-
-    console.log('[quoteMint] 离链计算完成!');
-    console.log('  - amount0:', amount0.toString());
-    console.log('  - amount1:', amount1.toString());
     
     return { amount0, amount1, token0, token1, isOffchainEstimate: true };
   } catch (err) {
-    console.error('💥 [quoteMint] 报价失败:', err.message);
+    console.error('💥 [quoteMint] Quote failed:', err.message);
     throw err;
   }
 }
 
-// ============ TickMath 辅助函数 (JS 版本) ============
+// ============ TickMath helper functions (JS version) ============
 
 const Q96 = 2n ** 96n;
 
 /**
- * 根据 tick 计算 sqrtPriceX96
- * 这是 TickMath.getSqrtRatioAtTick 的 JavaScript 实现
+ * Calculate sqrtPriceX96 based on tick
+ * This is the JavaScript implementation of TickMath.getSqrtRatioAtTick
  */
 function getSqrtRatioAtTick(tick) {
   const absTick = tick < 0 ? -tick : tick;
   
   if (absTick > 887272) {
-    throw new Error(`Tick ${tick} 超出范围 [-887272, 887272]`);
+    throw new Error(`Tick ${tick} is out of range [-887272, 887272]`);
   }
 
   let ratio = (absTick & 0x1) !== 0 
@@ -382,12 +352,12 @@ function getSqrtRatioAtTick(tick) {
     ratio = (2n ** 256n - 1n) / ratio;
   }
 
-  // 转换为 Q96 格式
+  // Convert to Q96 format
   return (ratio >> 32n) + (ratio % (1n << 32n) === 0n ? 0n : 1n);
 }
 
 /**
- * 计算给定流动性和价格范围所需的 token0 数量
+ * Calculate the amount of token0 required for given liquidity and price range
  */
 function getAmount0ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity) {
   if (sqrtRatioAX96 > sqrtRatioBX96) {
@@ -401,7 +371,7 @@ function getAmount0ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity) {
 }
 
 /**
- * 计算给定流动性和价格范围所需的 token1 数量
+ * Calculate the amount of token1 required for given liquidity and price range
  */
 function getAmount1ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity) {
   if (sqrtRatioAX96 > sqrtRatioBX96) {
@@ -411,64 +381,7 @@ function getAmount1ForLiquidity(sqrtRatioAX96, sqrtRatioBX96, liquidity) {
   return (liquidity * (sqrtRatioBX96 - sqrtRatioAX96)) / Q96;
 }
 
-// ============ 保留旧的 staticCall 版本用于调试 ============
-
-export async function quoteMintDebug(provider, poolAddr, recipient, tickLower, tickUpper, liquidityAmount) {
-  console.log('[quoteMintDebug] 开始调试报价...');
-  console.log('  - poolAddr:', poolAddr);
-  console.log('  - recipient:', recipient);
-  console.log('  - tickLower:', tickLower);
-  console.log('  - tickUpper:', tickUpper);
-  console.log('  - liquidityAmount:', liquidityAmount.toString());
-
-  const pool = getPoolContract(provider, poolAddr);
-  
-  try {
-    // 先读取 pool 的基本信息
-    console.log('[quoteMintDebug] 读取 Pool 信息...');
-    const [slot0, token0, token1, fee, tickSpacing, liquidity] = await Promise.all([
-      pool.slot0(),
-      pool.token0(),
-      pool.token1(),
-      pool.fee(),
-      pool.tickSpacing(),
-      pool.liquidity(),
-    ]);
-    
-    console.log('[quoteMintDebug] Pool 信息:');
-    console.log('  - sqrtPriceX96:', slot0.sqrtPriceX96.toString());
-    console.log('  - currentTick:', slot0.tick.toString());
-    console.log('  - token0:', token0);
-    console.log('  - token1:', token1);
-    console.log('  - fee:', fee.toString());
-    console.log('  - tickSpacing:', tickSpacing.toString());
-    console.log('  - liquidity:', liquidity.toString());
-
-    // 检查是否初始化
-    if (slot0.sqrtPriceX96 === 0n) {
-      throw new Error('Pool 未初始化 (sqrtPriceX96 = 0)');
-    }
-
-    // 检查 tick 参数
-    const tickSpacingNum = Number(tickSpacing);
-    if (tickLower % tickSpacingNum !== 0) {
-      throw new Error(`tickLower (${tickLower}) must be multiple of tickSpacing (${tickSpacingNum}). Remainder: ${tickLower % tickSpacingNum}`);
-    }
-    if (tickUpper % tickSpacingNum !== 0) {
-      throw new Error(`tickUpper (${tickUpper}) must be multiple of tickSpacing (${tickSpacingNum}). Remainder: ${tickUpper % tickSpacingNum}`);
-    }
-
-    // 尝试 staticCall
-    console.log('[quoteMintDebug] 尝试调用 mint.staticCall...');
-    const res = await pool.mint.staticCall(recipient, tickLower, tickUpper, liquidityAmount, '0x');
-    console.log('[quoteMintDebug] staticCall 成功:', { amount0: res[0].toString(), amount1: res[1].toString() });
-    
-    return { amount0: res[0], amount1: res[1] };
-  } catch (err) {
-    console.error('[quoteMintDebug] 错误:', err);
-    throw err;
-  }
-}
+// ============ Keep old staticCall version for debugging ============
 
 export async function approveIfNeeded(provider, signer, tokenAddr, spender, requiredAmount) {
   const token = getErc20Contract(signer, tokenAddr);
@@ -517,7 +430,7 @@ export async function addLiquidity(provider, signer, poolAddr, tickLower, tickUp
  * if pool balances change between estimation and execution.
  */
 export async function estimateSwapOut(provider, poolAddr, zeroForOne, amountIn) {
-  console.log(`      🔍 estimateSwapOut: 池子=${poolAddr.slice(0,8)}..., 方向=${zeroForOne}, 输入=${amountIn.toString()}`);
+  console.log(`      🔍 estimateSwapOut: pool=${poolAddr.slice(0,8)}..., direction=${zeroForOne}, input=${amountIn.toString()}`);
   
   const pool = getPoolContract(provider, poolAddr);
   const [token0, token1, fee] = await Promise.all([
@@ -526,7 +439,7 @@ export async function estimateSwapOut(provider, poolAddr, zeroForOne, amountIn) 
     pool.fee(),
   ]);
 
-  console.log(`      📝 代币信息: Token0=${token0.slice(0,8)}..., Token1=${token1.slice(0,8)}..., Fee=${fee}`);
+  console.log(`      📝 Token info: Token0=${token0.slice(0,8)}..., Token1=${token1.slice(0,8)}..., Fee=${fee}`);
 
   const tokenIn = zeroForOne ? token0 : token1;
   const tokenOut = zeroForOne ? token1 : token0;
@@ -538,36 +451,21 @@ export async function estimateSwapOut(provider, poolAddr, zeroForOne, amountIn) 
     erc20Token1.balanceOf(poolAddr),
   ]);
 
-  console.log(`      💰 池子余额: Token0=${balance0.toString()}, Token1=${balance1.toString()}`);
-
   let amountInNet = BigInt(amountIn);
   const feeBI = BigInt(fee);
   const feeAmount = (amountInNet * feeBI) / 1000000n;
   amountInNet -= feeAmount;
 
-  console.log(`      📊 计算详情: 原始输入=${amountIn.toString()}, 手续费=${feeAmount.toString()}, 净输入=${amountInNet.toString()}`);
-
   if (balance0 === 0n || balance1 === 0n) {
-    console.log(`      ❌ 池子余额为0，无法进行交换`);
-    throw new Error(`池子无流动性: Token0余额=${balance0.toString()}, Token1余额=${balance1.toString()}`);
+    throw new Error(`Pool has no liquidity: Token0 balance=${balance0.toString()}, Token1 balance=${balance1.toString()}`);
   }
 
   let amountOut;
   if (zeroForOne) {
-    // selling token0 for token1
     amountOut = (amountInNet * BigInt(balance1)) / (BigInt(balance0) + amountInNet);
-    console.log(`      ⬇️ Token0→Token1: (${amountInNet.toString()} * ${balance1.toString()}) / (${balance0.toString()} + ${amountInNet.toString()}) = ${amountOut.toString()}`);
   } else {
-    // selling token1 for token0
     amountOut = (amountInNet * BigInt(balance0)) / (BigInt(balance1) + amountInNet);
-    console.log(`      ⬇️ Token1→Token0: (${amountInNet.toString()} * ${balance0.toString()}) / (${balance1.toString()} + ${amountInNet.toString()}) = ${amountOut.toString()}`);
   }
-
-  if (amountOut === 0n) {
-    console.log(`      ❌ 计算结果为0，可能是输入金额太小或池子流动性不足`);
-  }
-
-  console.log(`      ✅ 报价计算完成: 输出=${amountOut.toString()}`);
 
   return {
     amountOut,
@@ -584,20 +482,14 @@ export async function estimateSwapOut(provider, poolAddr, zeroForOne, amountIn) 
  * Returns { tx, amountIn, amountOut, tokenIn, tokenOut }.
  */
 export async function swapExactIn(provider, signer, poolAddr, zeroForOne, amountIn, sqrtPriceLimitX96Override) {
-  console.log(`🔄 开始交换: 池子=${poolAddr.slice(0,8)}..., 方向=${zeroForOne}, 金额=${amountIn.toString()}`);
-  
   try {
-    // 1. 检查池子是否初始化
-    console.log(`  📍 检查池子初始化状态...`);
     const poolStatus = await checkPoolStatus(provider, poolAddr);
     if (poolStatus.status !== 'INITIALIZED') {
-      throw new Error(`池子未初始化: ${poolStatus.message}`);
+      throw new Error(`Pool not initialized: ${poolStatus.message}`);
     }
-    console.log(`  ✅ 池子已初始化`);
 
     const poolRead = getPoolContract(provider, poolAddr);
     const recipient = await signer.getAddress();
-    console.log(`  👤 接收者: ${recipient.slice(0,8)}...`);
     
     const [token0, token1] = await Promise.all([
       poolRead.token0(),
@@ -606,30 +498,24 @@ export async function swapExactIn(provider, signer, poolAddr, zeroForOne, amount
 
     const tokenIn = zeroForOne ? token0 : token1;
     const tokenOut = zeroForOne ? token1 : token0;
-    console.log(`  📤 输入代币: ${tokenIn.slice(0,8)}...`);
-    console.log(`  📥 输出代币: ${tokenOut.slice(0,8)}...`);
 
-    // 2. 验证输入金额
+    // 2. Validate input amount
     const amountInBigInt = BigInt(amountIn);
     if (amountInBigInt <= 0n) {
-      throw new Error(`输入金额必须大于0`);
+      throw new Error(`Input amount must be greater than 0`);
     }
 
-    // 3. 批准代币支出
-    console.log(`  ✅ 批准代币支出...`);
+    // Approve token spending
     await approveIfNeeded(provider, signer, tokenIn, poolAddr, amountInBigInt);
 
-    // 4. 设置价格限制
+    // Set price limit
     const sqrtPriceLimitX96 =
       sqrtPriceLimitX96Override !== undefined && sqrtPriceLimitX96Override !== null
         ? sqrtPriceLimitX96Override
         : (zeroForOne ? MIN_SQRT_RATIO + 1n : MAX_SQRT_RATIO - 1n);
-    
-    console.log(`  🎯 价格限制: ${sqrtPriceLimitX96.toString().slice(0, 20)}...`);
 
-    // 5. 执行交换
+    // Execute swap
     const poolWrite = getPoolContract(signer, poolAddr);
-    console.log(`  💫 发起交换交易...`);
     let res;
     try {
       res = await poolWrite.swap(
@@ -640,16 +526,14 @@ export async function swapExactIn(provider, signer, poolAddr, zeroForOne, amount
         '0x'
       );
     } catch (err) {
-      // 提供更详细的错误信息
+      // Provide more detailed error information
       if (err.code === 'CALL_EXCEPTION' || err.message.includes('reverted')) {
-        throw new Error(`交换执行失败 (可能是流动性不足或价格滑点超限): ${err.message}`);
+        throw new Error(`Swap execution failed (may be insufficient liquidity or price slippage exceeded): ${err.message}`);
       }
       throw err;
     }
 
-    console.log(`  ⏳ 等待交易确认...`);
     const receipt = await res.wait();
-    console.log(`  ✅ 交换完成! Tx: ${res.hash.slice(0,10)}...`);
 
     return {
       tx: res,
@@ -659,7 +543,7 @@ export async function swapExactIn(provider, signer, poolAddr, zeroForOne, amount
       amountIn: amountInBigInt,
     };
   } catch (err) {
-    console.error(`  ❌ 交换失败:`, err);
+    console.error(`  ❌ Swap failed:`, err);
     throw err;
   }
 }
@@ -705,7 +589,7 @@ export async function deployToken(provider, signer, tokenBytecode, name, symbol,
     throw new Error('Token bytecode is required. Please compile the contract first.');
   }
   
-  // 验证输入参数
+  // Validate input parameters
   if (!name || !symbol) {
     throw new Error('Token name and symbol are required');
   }
@@ -731,43 +615,32 @@ export async function deployToken(provider, signer, tokenBytecode, name, symbol,
     }
   ];
   
-  console.log('🔄 [deployToken] 开始部署 Token:');
-  console.log('  名称:', name);
-  console.log('  符号:', symbol);
-  console.log('  小数位:', decimals);
-  console.log('  初始供应量:', initialSupply);
+  // Token deployment starting
   
   const factory = new ethers.ContractFactory(MockTokenConstructorABI, tokenBytecode, signer);
   
-  // 验证bytecode不为空
+  // Verify bytecode is not empty
   if (!factory.bytecode || factory.bytecode === '0x') {
     throw new Error('Failed to parse token bytecode. Please ensure VITE_TOKEN_BYTECODE is correctly set in .env.local');
   }
   
   let deployTx;
   try {
-    console.log('  ⏳ 正在发送部署交易...');
     const contract = await factory.deploy(name, symbol, decimals, BigInt(initialSupply));
-    console.log('  ⏳ 等待部署确认...');
     deployTx = contract.deploymentTransaction();
-    console.log('  📝 交易哈希:', deployTx?.hash);
     
     await contract.waitForDeployment();
     const address = await contract.getAddress();
-    
-    console.log('  ✅ Token 部署成功!');
-    console.log('  📍 合约地址:', address);
     
     return {
       address,
       tx: deployTx
     };
   } catch (err) {
-    console.error('  ❌ Token 部署失败:', err.message);
     if (err.message.includes('insufficient funds')) {
-      throw new Error('部署失败：账户余额不足。请确保你的账户在 Sepolia 测试网中有足够的 ETH');
+      throw new Error('Deployment failed: Account balance insufficient. Please ensure your account has enough ETH on Sepolia testnet');
     } else if (err.message.includes('transaction failed')) {
-      throw new Error('部署失败：交易执行失败。这可能是因为 bytecode 无效或网络问题');
+      throw new Error('Deployment failed: Transaction execution failed. This may be due to invalid bytecode or network issues');
     }
     throw err;
   }
@@ -789,26 +662,26 @@ export async function initializePool(provider, signer, poolAddress, sqrtPriceX96
 }
 
 /**
- * 检查池子的初始化状态
+ * Check pool initialization status
  */
 export async function checkPoolStatus(provider, poolAddress) {
   const pool = getPoolContract(provider, poolAddress);
   
   try {
-    // 检查池子是否存在
+    // Check if pool address exists
     const code = await provider.getCode(poolAddress);
     if (code === '0x') {
-      return { status: 'NOT_EXIST', message: '池子地址不存在或不是合约' };
+      return { status: 'NOT_EXIST', message: 'Pool address does not exist or is not a contract' };
     }
 
-    // 获取基本信息
+    // Get basic information
     const [token0, token1, fee] = await Promise.all([
       pool.token0(),
       pool.token1(),
       pool.fee(),
     ]);
 
-    // 检查初始化状态
+    // Check initialization status
     let slot0Data;
     try {
       slot0Data = await pool.slot0();
@@ -818,14 +691,14 @@ export async function checkPoolStatus(provider, poolAddress) {
       if (sqrtPriceX96 === 0n) {
         return { 
           status: 'NOT_INITIALIZED', 
-          message: '池子存在但未初始化 (sqrtPriceX96 = 0)',
+          message: 'Pool exists but not initialized (sqrtPriceX96 = 0)',
           token0, 
           token1, 
           fee 
         };
       }
       
-      // 获取流动性
+      // Get liquidity
       const erc20Token0 = getErc20Contract(provider, token0);
       const erc20Token1 = getErc20Contract(provider, token1);
       const [balance0, balance1] = await Promise.all([
@@ -835,7 +708,7 @@ export async function checkPoolStatus(provider, poolAddress) {
 
       return {
         status: 'INITIALIZED',
-        message: '池子已初始化',
+        message: 'Pool is initialized',
         token0,
         token1,
         fee,
@@ -847,7 +720,7 @@ export async function checkPoolStatus(provider, poolAddress) {
     } catch (err) {
       return {
         status: 'ERROR_READING_STATE',
-        message: `读取池子状态失败: ${err.message}`,
+        message: `Failed to read pool status: ${err.message}`,
         token0,
         token1,
         fee,
@@ -856,7 +729,7 @@ export async function checkPoolStatus(provider, poolAddress) {
   } catch (err) {
     return {
       status: 'ERROR',
-      message: `检查池子状态失败: ${err.message}`,
+      message: `Failed to check pool status: ${err.message}`,
     };
   }
 }
@@ -1011,117 +884,99 @@ export async function enableFeeAmount(provider, signer, fee, tickSpacing) {
  */
 export async function quoteBurn(provider, poolAddr, tickLower, tickUpper, liquidityAmount) {
   try {
-    console.log('[quoteBurn] 开始赎回报价:');
-    console.log('  - poolAddr:', poolAddr);
-    console.log('  - tickLower:', tickLower);
-    console.log('  - tickUpper:', tickUpper);
-    console.log('  - liquidityAmount:', liquidityAmount.toString());
-
     const pool = getPoolContract(provider, poolAddr);
     const signer = provider.getSigner?.() || provider;
     
-    // 先验证基本信息
+    // First validate basic information
     const [slot0, tickSpacing] = await Promise.all([
       pool.slot0(),
       pool.tickSpacing(),
     ]);
 
-    // 检查池子初始化
+    // Check pool initialization
     if (slot0.sqrtPriceX96 === 0n) {
-      throw new Error('池子未初始化，无法计算赎回');
+      throw new Error('Pool not initialized, cannot calculate burn');
     }
 
-    // 检查 tick 对齐
+    // Check tick alignment
     const ts = Number(tickSpacing);
     if (tickLower % ts !== 0 || tickUpper % ts !== 0) {
-      throw new Error(`Tick 必须是 tickSpacing (${ts}) 的倍数。tickLower=${tickLower}, tickUpper=${tickUpper}`);
+      throw new Error(`Tick must be multiple of tickSpacing (${ts}). tickLower=${tickLower}, tickUpper=${tickUpper}`);
     }
 
-    // 检查 tick 范围有效性
+    // Check tick range validity
     if (tickLower >= tickUpper) {
-      throw new Error(`tickLower (${tickLower}) 必须小于 tickUpper (${tickUpper})`);
+      throw new Error(`tickLower (${tickLower}) must be less than tickUpper (${tickUpper})`);
     }
 
-    // 尝试 staticCall
-    console.log('[quoteBurn] 尝试调用 burn.staticCall...');
+    // Try staticCall
     try {
       const res = await pool.burn.staticCall(tickLower, tickUpper, liquidityAmount);
-      console.log('[quoteBurn] staticCall 成功:', { amount0: res[0].toString(), amount1: res[1].toString() });
       return { amount0: res[0], amount1: res[1] };
     } catch (staticCallErr) {
-      console.warn('[quoteBurn] staticCall 失败:', staticCallErr.message);
-      
-      // staticCall 失败时，检查该位置是否真的有持仓
+      // When staticCall fails, check if this position has actual holdings
       if (staticCallErr.message.includes('Insufficient liquidity')) {
         try {
-          // 尝试获取调用者地址
+          // Try to get caller address
           let owner;
           try {
             const sig = await provider.getSigner?.();
             owner = await sig?.getAddress?.();
           } catch (e) {
-            console.warn('[quoteBurn] 无法获取签者地址:', e.message);
+            console.warn('[quoteBurn] Unable to get signer address:', e.message);
           }
 
           if (owner) {
-            // 查询该位置的实际持仓
+            // Query actual holdings at this position
             const key = ethers.solidityPackedKeccak256(
               ['address', 'int24', 'int24'],
               [owner, tickLower, tickUpper]
             );
             const posData = await safeCallView(provider, poolAddr, AMMPoolABI, 'positions', [key]);
             const actualLiquidity = posData[0];
-            
-            console.log('[quoteBurn] 诊断信息:');
-            console.log('  - 该位置的实际流动性:', actualLiquidity.toString());
-            console.log('  - 您要赎回的数量:', liquidityAmount.toString());
-            
+            console.log('[quoteBurn] Diagnostic info:');
+            console.log('  - Actual liquidity at this position:', actualLiquidity.toString());
+            console.log('  - Amount to burn:', liquidityAmount.toString());
             if (actualLiquidity === 0n) {
               throw new Error(
-                `❌ 您在 Tick 范围 [${tickLower}, ${tickUpper}] 内没有流动性持仓！\n\n` +
-                `可能原因：\n` +
-                `1. 添加流动性时的 Tick 范围与现在不同\n` +
-                `2. 流动性已经被完全赎回\n` +
-                `3. Tick 参数不正确\n\n` +
-                `解决方案：\n` +
-                `• 点击"🔍 查询我的持仓"检查实际范围\n` +
-                `• 使用"💡 建议范围"找到有流动性的范围`
+                `❌ You have no liquidity position in the Tick range [${tickLower}, ${tickUpper}]!\n\n` +
+                `Possible reasons:\n` +
+                `1. The Tick range when adding liquidity is different from now\n` +
+                `2. Liquidity has been fully redeemed\n` +
+                `3. Tick parameters are incorrect\n\n` +
+                `Solutions:\n` +
+                `• Click "🔍 Query My Positions" to check actual range\n` +
+                `• Use "💡 Suggested Range" to find liquidity range`
               );
             }
             
             if (liquidityAmount > actualLiquidity) {
               throw new Error(
-                `❌ 赎回数量过多！\n` +
-                `实际持仓: ${actualLiquidity.toString()} LP\n` +
-                `要赎回: ${liquidityAmount.toString()} LP`
+                `❌ Redemption amount too large!\n` +
+                `Actual position: ${actualLiquidity.toString()} LP\n` +
+                `To redeem: ${liquidityAmount.toString()} LP`
               );
             }
           }
         } catch (diagErr) {
-          console.error('[quoteBurn] 诊断检查失败:', diagErr.message);
-          // 如果诊断也失败，继续使用离链计算
+          console.error('[quoteBurn] Diagnostic check failed:', diagErr.message);
+          // If diagnostic check also fails, continue with off-chain calculation
         }
       }
       
-      // 尝试离链计算作为备选
-      console.log('[quoteBurn] 尝试离链计算...');
+      // Try off-chain calculation as fallback
       const offchainResult = await quoteBurnOffchain(provider, poolAddr, tickLower, tickUpper, liquidityAmount);
-      console.log('[quoteBurn] 离链计算结果:', offchainResult);
       return offchainResult;
     }
   } catch (err) {
-    console.error('[quoteBurn] 赎回报价失败:', err.message);
     throw err;
   }
 }
 
 /**
- * 离链计算赎回金额（备选方案，当 staticCall 失败时使用）
+ * Off-chain calculation for redemption amount (alternative when staticCall fails)
  */
 async function quoteBurnOffchain(provider, poolAddr, tickLower, tickUpper, liquidityAmount) {
-  console.log('[quoteBurnOffchain] 开始离链计算...');
-  console.log('  - liquidityAmount:', liquidityAmount.toString());
-  
   try {
     const pool = getPoolContract(provider, poolAddr);
     const [slot0, tickSpacing] = await Promise.all([
@@ -1133,48 +988,28 @@ async function quoteBurnOffchain(provider, poolAddr, tickLower, tickUpper, liqui
     const currentTick = Number(slot0.tick);
     const ts = Number(tickSpacing);
 
-    console.log('[quoteBurnOffchain] 池子信息:');
-    console.log('  - currentTick:', currentTick);
-    console.log('  - tickSpacing:', ts);
-    console.log('  - sqrtPriceX96:', sqrtPriceX96.toString());
-
-    // 得到该范围的 sqrtRatio
+    // Get sqrtRatio for this range
     const sqrtRatioAX96 = getSqrtRatioAtTick(tickLower);
     const sqrtRatioBX96 = getSqrtRatioAtTick(tickUpper);
 
-    console.log('[quoteBurnOffchain] 计算范围:');
-    console.log('  - tickLower:', tickLower, '-> sqrtRatioA:', sqrtRatioAX96.toString());
-    console.log('  - tickUpper:', tickUpper, '-> sqrtRatioB:', sqrtRatioBX96.toString());
-
-    // 离链计算赎回金额（反向计算）
+    // Off-chain calculation of redemption amount (reverse calculation)
     let amount0 = 0n;
     let amount1 = 0n;
     const L = BigInt(liquidityAmount);
     const Q96 = 2n ** 96n;
 
     if (sqrtPriceX96 < sqrtRatioAX96) {
-      // 当前价格低于范围，取回 token0
-      console.log('[quoteBurnOffchain] 价格模式: 低于范围 (取回 token0)');
       amount0 = (L * (sqrtRatioBX96 - sqrtRatioAX96)) / Q96;
     } else if (sqrtPriceX96 < sqrtRatioBX96) {
-      // 当前价格在范围内，取回两种
-      console.log('[quoteBurnOffchain] 价格模式: 在范围内 (取回两种)');
       amount0 = (L * (sqrtRatioBX96 - sqrtPriceX96)) / Q96;
       amount1 = L * (sqrtPriceX96 - sqrtRatioAX96) / Q96;
     } else {
-      // 当前价格高于范围，取回 token1
-      console.log('[quoteBurnOffchain] 价格模式: 高于范围 (取回 token1)');
       amount1 = L * (sqrtRatioBX96 - sqrtRatioAX96) / Q96;
     }
-
-    console.log('[quoteBurnOffchain] 计算结果:');
-    console.log('  - amount0:', amount0.toString());
-    console.log('  - amount1:', amount1.toString());
     
     return { amount0, amount1 };
   } catch (err) {
-    console.error('[quoteBurnOffchain] 离链计算失败:', err.message);
-    throw new Error(`离链计算失败: ${err.message}`);
+    throw new Error(`Off-chain calculation failed: ${err.message}`);
   }
 }
 
@@ -1201,27 +1036,27 @@ export async function getFeeAmountTickSpacing(provider, fee) {
   return Number(result[0]);
 }
 
-// ========== 市场分析相关函数 ==========
+// ========== Market analysis functions ==========
 
 /**
- * 获取池子的历史 Swap 事件（带时间戳）
+ * Get pool's historical Swap events (with timestamps)
  */
 export async function getSwapHistory(provider, poolAddr, fromBlock = 'latest', toBlock = 'latest', limit = 100) {
   try {
     const pool = getPoolContract(provider, poolAddr);
     
-    // 检查是否支持Swap事件
+    // Check if Swap events are supported
     if (!pool.filters || typeof pool.filters.Swap !== 'function') {
-      console.warn('合约不支持Swap事件过滤器');
+      console.warn('Contract does not support Swap event filters');
       return [];
     }
     
     const filter = pool.filters.Swap();
     
-    // 获取最近的事件
+    // Fetch recent events
     const events = await pool.queryFilter(filter, fromBlock === 'latest' ? -limit : fromBlock, toBlock);
     
-    // 批量获取区块时间戳以提高效率
+    // Batch fetch block timestamps for efficiency
     const blockNumbers = [...new Set(events.map(e => e.blockNumber))];
     const blockPromises = blockNumbers.map(bn => provider.getBlock(bn));
     const blocks = await Promise.all(blockPromises);
@@ -1244,18 +1079,18 @@ export async function getSwapHistory(provider, poolAddr, fromBlock = 'latest', t
       blockTimestamp: blockTimeMap.get(event.blockNumber)
     }));
   } catch (err) {
-    console.warn('获取交易历史失败，返回空数据:', err.message);
+    console.warn('Failed to fetch transaction history, returning empty data:', err.message);
     return [];
   }
 }
 
 /**
- * 计算池子的 24 小时交易量
+ * Calculate pool's 24-hour trading volume
  */
 export async function get24hVolume(provider, poolAddr) {
   try {
     const currentBlock = await provider.getBlockNumber();
-    const blocksIn24h = Math.floor(24 * 60 * 60 / 12); // 假设12秒一个区块
+    const blocksIn24h = Math.floor(24 * 60 * 60 / 12); // Assuming 12 seconds per block
     const fromBlock = currentBlock - blocksIn24h;
     
     const swapEvents = await getSwapHistory(provider, poolAddr, fromBlock, 'latest', 1000);
@@ -1270,56 +1105,56 @@ export async function get24hVolume(provider, poolAddr) {
     
     return { volume0, volume1, swapCount: swapEvents.length };
   } catch (err) {
-    console.error('计算24h交易量失败:', err);
+    console.error('Failed to calculate 24h trading volume:', err);
     return { volume0: 0n, volume1: 0n, swapCount: 0 };
   }
 }
 
 /**
- * 计算当前价格（基于 sqrtPriceX96）
- * 基于Uniswap V3 SDK的精确算法
+ * Calculate current price (based on sqrtPriceX96)
+ * Based on Uniswap V3 SDK's precise algorithm
  */
 export function calculatePrice(sqrtPriceX96, decimals0 = 18, decimals1 = 18) {
   if (!sqrtPriceX96 || sqrtPriceX96 === 0n) return 0;
   
-  // 使用Uniswap V3 SDK相同的精确算法
+  // Use the same precise algorithm as Uniswap V3 SDK
   // price = (sqrtPriceX96 / 2^96)^2 * (10^decimals1 / 10^decimals0)
   const Q96 = 2n ** 96n;
   const Q192 = Q96 ** 2n;
   
   try {
-    // 防止溢出，先计算平方
+    // Prevent overflow by calculating square first
     const sqrtPriceSquared = BigInt(sqrtPriceX96) ** 2n;
     
-    // 调整小数位
+    // Adjust decimal places
     const decimalAdjustment = (10n ** BigInt(decimals1)) / (10n ** BigInt(decimals0));
     
-    // 计算最终价格
+    // Calculate final price
     const price = (sqrtPriceSquared * decimalAdjustment) / Q192;
     
-    // 转换为数字格式，保持18位精度
+    // Convert to number format, maintaining 18-bit precision
     return Number(price * 10n ** 18n) / Number(10n ** 18n);
   } catch (error) {
-    console.warn('价格计算失败:', error);
+    console.warn('Price calculation failed:', error);
     return 0;
   }
 }
 
 /**
- * 计算两个tick之间的价格范围
- * @param {number} tickLower 低价tick
- * @param {number} tickUpper 高价tick
- * @param {number} decimals0 token0精度
- * @param {number} decimals1 token1精度
+ * Calculate price range between two ticks
+ * @param {number} tickLower Lower price tick
+ * @param {number} tickUpper Upper price tick
+ * @param {number} decimals0 token0 decimal places
+ * @param {number} decimals1 token1 decimal places
  */
 export function calculateTickPriceRange(tickLower, tickUpper, decimals0 = 18, decimals1 = 18) {
   try {
-    // 使用TickMath公式计算sqrtPrice
+    // Use TickMath formula to calculate sqrtPrice
     // sqrtPrice = 1.0001^(tick/2)
     const sqrtPriceLower = Math.pow(1.0001, tickLower / 2);
     const sqrtPriceUpper = Math.pow(1.0001, tickUpper / 2);
     
-    // 转换为sqrtPriceX96格式
+    // Convert to sqrtPriceX96 format
     const Q96 = Math.pow(2, 96);
     const sqrtPriceLowerX96 = BigInt(Math.floor(sqrtPriceLower * Q96));
     const sqrtPriceUpperX96 = BigInt(Math.floor(sqrtPriceUpper * Q96));
@@ -1331,13 +1166,13 @@ export function calculateTickPriceRange(tickLower, tickUpper, decimals0 = 18, de
       sqrtPriceUpperX96
     };
   } catch (error) {
-    console.warn('Tick价格范围计算失败:', error);
+    console.warn('Tick price range calculation failed:', error);
     return { priceLower: 0, priceUpper: 0, sqrtPriceLowerX96: 0n, sqrtPriceUpperX96: 0n };
   }
 }
 
 /**
- * 计算TVL（总锁定价值）
+ * Calculate TVL (Total Locked Value)
  */
 export async function calculateTVL(provider, poolAddr, token0Price = 1, token1Price = 1) {
   try {
@@ -1352,13 +1187,13 @@ export async function calculateTVL(provider, poolAddr, token0Price = 1, token1Pr
       getTokenInfo(provider, tokens.token1)
     ]);
     
-    // 获取池子中的代币余额
+    // Get token balances in the pool
     const [balance0, balance1] = await Promise.all([
       getTokenBalance(provider, tokens.token0, poolAddr),
       getTokenBalance(provider, tokens.token1, poolAddr)
     ]);
     
-    // 计算TVL
+    // Calculate TVL
     const tvl0 = Number(balance0) / Number(10n ** BigInt(token0Info.decimals)) * token0Price;
     const tvl1 = Number(balance1) / Number(10n ** BigInt(token1Info.decimals)) * token1Price;
     
@@ -1370,13 +1205,13 @@ export async function calculateTVL(provider, poolAddr, token0Price = 1, token1Pr
       token1Balance: balance1
     };
   } catch (err) {
-    console.error('计算TVL失败:', err);
+    console.error('Failed to calculate TVL:', err);
     throw err;
   }
 }
 
 /**
- * 计算无常损失
+ * Calculate impermanent loss
  */
 export function calculateImpermanentLoss(initialPrice, currentPrice) {
   if (initialPrice <= 0 || currentPrice <= 0) return 0;
@@ -1385,11 +1220,11 @@ export function calculateImpermanentLoss(initialPrice, currentPrice) {
   const sqrtRatio = Math.sqrt(ratio);
   const impermanentLoss = 2 * sqrtRatio / (1 + ratio) - 1;
   
-  return impermanentLoss * 100; // 返回百分比
+  return impermanentLoss * 100; // Return as percentage
 }
 
 /**
- * 获取价格变化趋势
+ * Get price change trend
  */
 export async function getPriceTrend(provider, poolAddr, timeframeBocks = 100) {
   try {
@@ -1410,14 +1245,14 @@ export async function getPriceTrend(provider, poolAddr, timeframeBocks = 100) {
     
     return { trend, change, firstPrice, lastPrice };
   } catch (err) {
-    console.error('获取价格趋势失败:', err);
+    console.error('Failed to get price trend:', err);
     return { trend: 'neutral', change: 0 };
   }
 }
 
 /**
- * 获取流动性分布（活跃的tick范围）
- * 基于Uniswap V3 SDK的TickListDataProvider模式
+ * Get liquidity distribution (active tick range)
+ * Based on Uniswap V3 SDK's TickListDataProvider pattern
  */
 export async function getLiquidityDistribution(provider, poolAddr, tickRange = 100) {
   try {
@@ -1429,12 +1264,12 @@ export async function getLiquidityDistribution(provider, poolAddr, tickRange = 1
     const currentTick = Number(slot0Data[1]);
     const fee = await poolContract.fee();
     
-    // 获取tickSpacing
+    // Get tickSpacing
     let tickSpacing;
     try {
       tickSpacing = await getFeeAmountTickSpacing(provider, Number(fee));
     } catch {
-      // fallback到默认值
+      // Fallback to default values
       const feeNum = Number(fee);
       tickSpacing = feeNum === 500 ? 10 : feeNum === 3000 ? 60 : feeNum === 10000 ? 200 : 60;
     }
@@ -1442,17 +1277,17 @@ export async function getLiquidityDistribution(provider, poolAddr, tickRange = 1
     const distribution = [];
     const promises = [];
     
-    // 查询当前tick周围的流动性分布，按tickSpacing对齐
+    // Query liquidity distribution around current tick, aligned by tickSpacing
     for (let i = -tickRange; i <= tickRange; i += Math.max(tickSpacing, 10)) {
       const tick = currentTick + i;
-      // 确保 tick 是 tickSpacing 的倍数
+      // Ensure tick is a multiple of tickSpacing
       const alignedTick = Math.floor(tick / tickSpacing) * tickSpacing;
       
       promises.push(
         getTickInfo(provider, poolAddr, alignedTick)
           .then(tickInfo => {
             if (tickInfo.initialized && tickInfo.liquidityGross > 0n) {
-              // 计算该tick的价格范围
+              // Calculate price range for this tick
               const priceRange = calculateTickPriceRange(
                 alignedTick, 
                 alignedTick + tickSpacing
@@ -1472,36 +1307,36 @@ export async function getLiquidityDistribution(provider, poolAddr, tickRange = 1
             }
             return null;
           })
-          .catch(() => null) // 忽略错误
+          .catch(() => null) // Ignore errors
       );
     }
     
     const results = await Promise.all(promises);
     const validResults = results.filter(result => result !== null);
     
-    // 按距离当前tick的远近排序
+    // Sort by distance from current tick
     return validResults.sort((a, b) => a.distanceFromCurrent - b.distanceFromCurrent);
   } catch (err) {
-    console.error('获取流动性分布失败:', err);
+    console.error('Failed to get liquidity distribution:', err);
     return [];
   }
 }
 
-// ========== 价格预言机相关功能 ==========
+// ========== Price Oracle Related Functions ==========
 
 /**
- * 获取池子的历史价格观察数据（TWAP）
- * 基于Uniswap V3的Oracle机制
+ * Get pool's historical price observation data (TWAP)
+ * Based on Uniswap V3's Oracle mechanism
  */
 export async function getPoolPriceObservations(provider, poolAddr, secondsAgo = [3600, 0]) {
   try {
     const pool = getPoolContract(provider, poolAddr);
     
-    // 检查是否支持observe函数
+    // Check if observe function is supported
     if (typeof pool.observe !== 'function') {
-      console.warn('合约不支持observe函数，使用当前价格代替');
+      console.warn('Contract does not support observe function, using current price instead');
       
-      // Fallback: 使用当前价格代替
+      // Fallback: use current price instead
       const slot0Data = await readSlot0(provider, poolAddr);
       const currentTick = Number(slot0Data[1]);
       const currentPrice = Math.pow(1.0001, currentTick);
@@ -1516,20 +1351,20 @@ export async function getPoolPriceObservations(provider, poolAddr, secondsAgo = 
       };
     }
     
-    // 获取观察数据
+    // Fetch observation data
     const observations = await pool.observe(secondsAgo);
     
     if (observations.length >= 2) {
       const tickCumulatives = observations[0];
       const secondsPerLiquidityCumulatives = observations[1];
       
-      // 计算TWAP价格
+      // Calculate TWAP price
       const timeWeightedTick = (
         Number(tickCumulatives[tickCumulatives.length - 1]) - 
         Number(tickCumulatives[0])
       ) / (secondsAgo[0] - secondsAgo[secondsAgo.length - 1]);
       
-      // 计算时间加权平均价格
+      // Calculate time-weighted average price
       const twapPrice = Math.pow(1.0001, timeWeightedTick);
       
       return {
@@ -1542,11 +1377,11 @@ export async function getPoolPriceObservations(provider, poolAddr, secondsAgo = 
       };
     }
     
-    throw new Error('观察数据不足');
+    throw new Error('Insufficient observation data');
   } catch (err) {
-    console.warn('获取价格观察数据失败，使用当前价格代替:', err.message);
+    console.warn('Failed to get price observation data, using current price instead:', err.message);
     
-    // Fallback机制
+    // Fallback mechanism
     try {
       const slot0Data = await readSlot0(provider, poolAddr);
       const currentTick = Number(slot0Data[1]);
@@ -1561,15 +1396,15 @@ export async function getPoolPriceObservations(provider, poolAddr, secondsAgo = 
         fallback: true
       };
     } catch (fallbackErr) {
-      console.error('获取价格观察数据失败:', fallbackErr);
+      console.error('Failed to get price observation data:', fallbackErr);
       throw fallbackErr;
     }
   }
 }
 
 /**
- * 计算价格影响（Price Impact）
- * 基于Uniswap V3 SDK的Trade类
+ * Calculate price impact (Price Impact)
+ * Based on Uniswap V3 SDK's Trade class
  */
 export async function calculatePriceImpact(provider, poolAddr, amountIn, zeroForOne) {
   try {
@@ -1581,34 +1416,34 @@ export async function calculatePriceImpact(provider, poolAddr, amountIn, zeroFor
     const currentSqrtPrice = slot0Data[0];
     const currentPrice = calculatePrice(currentSqrtPrice);
     
-    // 模拟swap计算新价格
-    // 这里使用简化算法，实际应该使用SwapMath.computeSwapStep
+    // Simulate swap to calculate new price
+    // Use simplified algorithm here, should use SwapMath.computeSwapStep in production
     const liquidityBigInt = BigInt(liquidity);
     const amountInBigInt = BigInt(amountIn);
     
-    // 简化的价格影响计算
+    // Simplified price impact calculation
     let priceImpact;
     if (liquidityBigInt > 0n) {
       const liquidityRatio = Number(amountInBigInt) / Number(liquidityBigInt);
-      priceImpact = liquidityRatio * 0.1; // 简化公式
+      priceImpact = liquidityRatio * 0.1; // Simplified formula
     } else {
       priceImpact = 0;
     }
     
     return {
-      priceImpact: Math.min(priceImpact * 100, 100), // 返回百分比，最多100%
+      priceImpact: Math.min(priceImpact * 100, 100), // Return as percentage, max 100%
       currentPrice,
       estimatedNewPrice: currentPrice * (1 + (zeroForOne ? -priceImpact : priceImpact))
     };
   } catch (err) {
-    console.error('计算价格影响失败:', err);
+    console.error('Failed to calculate price impact:', err);
     return { priceImpact: 0, currentPrice: 0, estimatedNewPrice: 0 };
   }
 }
 
 /**
- * 获取池子的活跃流动性范围
- * 基于Uniswap V3 SDK的Position类
+ * Get pool's active liquidity range
+ * Based on Uniswap V3 SDK's Position class
  */
 export async function getActiveLiquidityRange(provider, poolAddr) {
   try {
@@ -1620,11 +1455,11 @@ export async function getActiveLiquidityRange(provider, poolAddr) {
     const currentTick = Number(slot0Data[1]);
     const currentSqrtPrice = slot0Data[0];
     
-    // 查找最近的活跃tick范围
-    const searchRange = 1000; // 搜索范围
+    // Find nearest active tick range
+    const searchRange = 1000; // Search range
     const activeTicks = [];
     
-    for (let i = -searchRange; i <= searchRange; i += 60) { // 使用60的tickSpacing
+    for (let i = -searchRange; i <= searchRange; i += 60) { // Use tickSpacing of 60
       const tick = currentTick + i;
       try {
         const tickInfo = await getTickInfo(provider, poolAddr, tick);
@@ -1639,11 +1474,11 @@ export async function getActiveLiquidityRange(provider, poolAddr) {
           });
         }
       } catch {
-        // 忽略错误
+        // Ignore errors
       }
     }
     
-    // 找到最近的上下界
+    // Find nearest upper and lower bounds
     const ticksBelow = activeTicks.filter(t => t.tick < currentTick).sort((a, b) => b.tick - a.tick);
     const ticksAbove = activeTicks.filter(t => t.tick > currentTick).sort((a, b) => a.tick - b.tick);
     
@@ -1659,7 +1494,7 @@ export async function getActiveLiquidityRange(provider, poolAddr) {
       totalActiveLiquidity: activeTicks.reduce((sum, tick) => sum + Number(tick.liquidityGross), 0)
     };
   } catch (err) {
-    console.error('获取活跃流动性范围失败:', err);
+    console.error('Failed to get active liquidity range:', err);
     return {
       currentTick: 0,
       currentPrice: 0,

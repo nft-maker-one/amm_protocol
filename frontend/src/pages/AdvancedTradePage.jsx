@@ -3,12 +3,8 @@ import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import { 
   Route, 
-  Activity, 
   CheckCircle, 
-  XCircle, 
-  Info,
-  Search,
-  Copy
+  XCircle,
 } from 'lucide-react';
 
 import {

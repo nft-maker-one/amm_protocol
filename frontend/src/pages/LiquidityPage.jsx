@@ -4,8 +4,8 @@ import toast from 'react-hot-toast';
 import { X, AlertTriangle } from 'lucide-react';
 
 import { findTokenByAddress } from '../api/tokens';
-import { getPoolList, getFilteredPoolList } from '../api/pools'; // 确保这里引用正确
-import PoolInfoCard from '../components/ui/PoolInfoCard'; // 引入统一组件
+import { getFilteredPoolList } from '../api/pools';
+import PoolInfoCard from '../components/ui/PoolInfoCard'; // Import unified component
 import {
   AMMPOOL_ADDRESS,
   ensureSepolia,
@@ -83,7 +83,7 @@ const LiquidityPage = () => {
           initialized: slot0.sqrtPriceX96 !== 0n,
         });
       } catch (err) {
-        console.error('Failed to fetch pool info:', err);
+        // Pool info fetch failed silently
       }
       setQuote(null);
       setBurnQuote(null);

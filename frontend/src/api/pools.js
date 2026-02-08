@@ -110,7 +110,7 @@ export const createAndAddPool = async (provider, signer, tokenA, tokenB, fee, to
   // Get the new pool address
   const newPoolAddr = await getPool(provider, tokenA, tokenB, fee);
   if (!newPoolAddr || newPoolAddr === ethers.ZeroAddress) {
-    throw new Error('创建后未返回有效池子地址');
+    throw new Error('Failed to return valid pool address after creation');
   }
   
   // Prepare pool info
@@ -172,7 +172,7 @@ export const initializePoolAndUpdate = async (provider, signer, poolAddress, sqr
       poolInfo: pools[poolIndex]
     };
   } catch (err) {
-    console.warn('读取slot0失败，但初始化可能成功:', err);
+    console.warn('Failed to read slot0, but initialization may have succeeded:', err);
     return { tx };
   }
 };
@@ -200,7 +200,7 @@ export const refreshPoolStatus = async (provider, poolAddress) => {
     
     return null;
   } catch (err) {
-    console.warn('刷新池子状态失败:', err);
+    console.warn('Failed to refresh pool status:', err);
     return null;
   }
 };

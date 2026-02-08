@@ -6,7 +6,7 @@ import {
   Terminal, Trash2 
 } from 'lucide-react';
 
-import { getPoolList, getFilteredPoolList, updatePoolInList, addPoolToList } from '../api/pools';
+import { getFilteredPoolList, updatePoolInList, addPoolToList } from '../api/pools';
 import PoolSelector from '../components/ui/PoolSelector';
 import TokenInputSelector from '../components/ui/TokenInputSelector';
 import PoolInfoCard from '../components/ui/PoolInfoCard';
@@ -71,41 +71,35 @@ const DeploymentPage = () => {
       const provider = new ethers.BrowserProvider(window.ethereum);
       await ensureSepolia(provider);
       const signer = await provider.getSigner();
-      const signerAddress = await signer.getAddress();
-      console.log(`[部署] 开始部署 Token: ${tokenName} (${tokenSymbol})`);
-      console.log(`[部署] 部署者地址: ${signerAddress}`);
-      
       const result = await deployToken(provider, signer, TOKEN_BYTECODE, tokenName, tokenSymbol, 18, '1000000');
-      console.log(`[部署] Token 部署成功: ${result.address}`);
       
       addCustomToken({ symbol: tokenSymbol, address: result.address, decimalsHint: 18, isCustom: true });
       setTokenList(getTokenList());
       toast.success(
         <div>
-          <b>Token 部署成功！</b><br/>
+          <b>Token deployed successfully!</b><br/>
           <span style={{fontSize:'0.8rem', fontFamily:'monospace'}}>{result.address}</span><br/>
-          <span style={{fontSize:'0.75rem', color:'#aaa'}}>请在 Sepolia Etherscan 上验证合约</span>
+          <span style={{fontSize:'0.75rem', color:'#aaa'}}>Please verify the contract on Sepolia Etherscan</span>
         </div>, 
         { id: toastId }
       );
       setTokenName(''); 
       setTokenSymbol('');
     } catch (err) {
-      console.error('[部署失败]', err);
       let errorMsg = err.message;
       
-      // 提供更详细的错误提示
+      // Provide more detailed error messages
       if (errorMsg.includes('bytecode')) {
-        errorMsg = 'TOKEN_BYTECODE 未配置或无效。请检查 .env.local 文件中的 VITE_TOKEN_BYTECODE 是否存在且正确';
+        errorMsg = 'TOKEN_BYTECODE not configured or invalid. Please check if VITE_TOKEN_BYTECODE exists and is correct in .env.local';
       } else if (errorMsg.includes('insufficient funds')) {
-        errorMsg = 'Sepolia 测试网 ETH 不足。请从水龙头获取测试 ETH: https://sepoliafaucet.com';
+        errorMsg = 'Sepolia testnet ETH insufficient. Get test ETH from faucet: https://sepoliafaucet.com';
       } else if (errorMsg.includes('transaction failed')) {
-        errorMsg = '交易执行失败。可能是网络拥堵或 bytecode 无效';
+        errorMsg = 'Transaction execution failed. May be due to network congestion or invalid bytecode';
       }
       
       toast.error(
         <div>
-          <b>部署失败</b><br/>
+          <b>Deployment failed</b><br/>
           <span style={{fontSize:'0.8rem'}}>{errorMsg}</span>
         </div>, 
         { id: toastId, duration: 5000 }
@@ -154,7 +148,7 @@ const DeploymentPage = () => {
       await initializePool(provider, signer, selectedPool.address, BigInt(poolSqrtPriceX96));
       updatePoolInList(selectedPool.address, { isInitialized: true, sqrtPriceX96: poolSqrtPriceX96 });
       setPoolList(getFilteredPoolList());
-      toast.success('初始化成功！', { id: toastId });
+      toast.success('Pool initialization successful!', { id: toastId });
     } catch (err) {
       toast.error('Failed: ' + err.message, { id: toastId });
     } finally { setLoading(false); }
@@ -230,14 +224,14 @@ const DeploymentPage = () => {
           <TokenInputSelector label="Token A" choice={createTokenAChoice} setChoice={setCreateTokenAChoice} customValue={createTokenACustom} setCustomValue={setCreateTokenACustom} tokenList={tokenList} />
           <TokenInputSelector label="Token B" choice={createTokenBChoice} setChoice={setCreateTokenBChoice} customValue={createTokenBCustom} setCustomValue={setCreateTokenBCustom} tokenList={tokenList} />
           <div style={{marginBottom:15}}>
-            <label style={{display:'block', fontSize:'0.9rem', marginBottom:5, color:'#aaa'}}>费用等级</label>
+            <label style={{display:'block', fontSize:'0.9rem', marginBottom:5, color:'#aaa'}}>Fee Tier</label>
             <select value={createFee} onChange={e=>setCreateFee(e.target.value)} style={{width:'100%', padding:'8px', background:'#222', color:'#fff', border:'1px solid #444', borderRadius:'4px'}}>
               <option value="500">500 (0.05%)</option>
-              <option value="3000">3000 (0.3%) - 推荐</option>
+              <option value="3000">3000 (0.3%) - Recommended</option>
               <option value="10000">10000 (1%)</option>
             </select>
           </div>
-          <button className="action-btn" onClick={handleCreatePool} disabled={loading}>创建池子</button>
+          <button className="action-btn" onClick={handleCreatePool} disabled={loading}>Create Pool</button>
         </div>
       )}
 
@@ -246,7 +240,14 @@ const DeploymentPage = () => {
           <PoolSelector selectedPool={selectedPool} onPoolSelect={setSelectedPoolState} />
           {selectedPool && <PoolInfoCard pool={selectedPool} isActive={true} showDetails={true} />}
           <div style={{marginTop:15}}>
-            <input type="number" value={poolPrice} onChange={e=>setPoolPrice(e.target.value)} style={{width:'100%', marginBottom:10}} />
+            <label style={{display:'block', fontSize:'0.9rem', marginBottom:5, color:'#aaa'}}>Initial Price</label>
+            <input 
+              type="number" 
+              placeholder="e.g., 1.0 for 1:1 ratio, 2.0 for 2:1 ratio" 
+              value={poolPrice} 
+              onChange={e=>setPoolPrice(e.target.value)} 
+              style={{width:'100%', padding:'8px', background:'#222', color:'#fff', border:'1px solid #444', borderRadius:'4px', marginBottom:10}} 
+            />
             <button className="action-btn" onClick={handleInitializePool} disabled={loading}>Complete Initialization</button>
           </div>
         </div>

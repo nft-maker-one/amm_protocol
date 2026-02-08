@@ -40,10 +40,10 @@ const DEFAULT_TOKENS = {
   }
 };
 
-// 在内存中存储自定义 token 列表
+// Store custom token list in memory
 let customTokens = [];
 
-// 初始化：从 localStorage 加载自定义 token
+// Initialize: load custom tokens from localStorage
 function loadCustomTokens() {
   try {
     const saved = localStorage.getItem('customTokens');
@@ -55,7 +55,7 @@ function loadCustomTokens() {
   }
 }
 
-// 保存自定义 token 到 localStorage
+// Save custom tokens to localStorage
 function saveCustomTokens() {
   try {
     localStorage.setItem('customTokens', JSON.stringify(customTokens));
@@ -64,7 +64,7 @@ function saveCustomTokens() {
   }
 }
 
-// 获取所有 token 列表（包括默认和自定义）
+// Get all token list (including default and custom)
 export function getTokenList() {
   loadCustomTokens();
   return [...Object.values(DEFAULT_TOKENS), ...customTokens];
@@ -72,15 +72,15 @@ export function getTokenList() {
 
 export const TOKENS = DEFAULT_TOKENS;
 
-// 为向后兼容，初始化 TOKEN_LIST
-// 注意：这在模块首次加载时固定，如需动态更新请使用 getTokenList()
+// For backward compatibility, initialize TOKEN_LIST
+// Note: This is fixed when the module is first loaded, use getTokenList() for dynamic updates
 export let TOKEN_LIST = getTokenList();
 
-// 添加自定义 token 到列表
+// Add custom token to list
 export function addCustomToken(tokenData) {
   loadCustomTokens();
   
-  // 检查是否已存在（地址）
+  // Check if already exists (by address)
   const exists = customTokens.some(t => 
     t.address.toLowerCase() === tokenData.address.toLowerCase()
   );
@@ -90,7 +90,7 @@ export function addCustomToken(tokenData) {
     return false;
   }
   
-  // 检查是否与默认 token 冲突
+  // Check if conflicts with default tokens
   const conflictsWithDefault = Object.values(DEFAULT_TOKENS).some(t =>
     t.address.toLowerCase() === tokenData.address.toLowerCase()
   );
@@ -110,7 +110,7 @@ export function addCustomToken(tokenData) {
   return true;
 }
 
-// 移除自定义 token
+// Remove custom token
 export function removeCustomToken(address) {
   loadCustomTokens();
   customTokens = customTokens.filter(t => 
@@ -119,7 +119,7 @@ export function removeCustomToken(address) {
   saveCustomTokens();
 }
 
-// 获取自定义 token 列表
+// Get custom token list
 export function getCustomTokens() {
   loadCustomTokens();
   return customTokens;

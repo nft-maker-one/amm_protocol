@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast'; 
 import { 
@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 
 import { findTokenByAddress } from '../api/tokens';
-import { getPoolList, getFilteredPoolList } from '../api/pools';
-// 1. 引入统一组件
+import { getFilteredPoolList } from '../api/pools';
+// Import unified components
 import PoolInfoCard from '../components/ui/PoolInfoCard';
 import {
   ensureSepolia,
@@ -25,9 +25,7 @@ import {
   getLiquidityDistribution,
   getSwapHistory,
   AMMPOOL_ADDRESS,
-  getPoolPriceObservations,
   calculatePriceImpact,
-  getActiveLiquidityRange,
 } from '../api/amm';
 
 import { 
@@ -69,8 +67,6 @@ const AnalyticsPage = () => {
   const [impermanentLossData, setImpermanentLossData] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
   const [liquidityDistribution, setLiquidityDistribution] = useState([]);
-  
-  const [oracleData, setOracleData] = useState(null);
   const [priceImpactData, setPriceImpactData] = useState(null);
   
   const [initialPrice, setInitialPrice] = useState('');
@@ -78,7 +74,12 @@ const AnalyticsPage = () => {
   const [swapAmount, setSwapAmount] = useState('');
   const [swapDirection, setSwapDirection] = useState(true);
 
+  const hasInitialized = useRef(false);
+
   useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
     const list = getFilteredPoolList();
     setPoolList(list);
     if (list.length > 0 && !selectedPool) {
@@ -157,19 +158,8 @@ const AnalyticsPage = () => {
       setMarketData(trend);
       setLiquidityDistribution(distribution);
       setPriceHistory(swapHistory);
-
-      await loadAdvancedAnalytics(provider, targetAddr);
     } catch (err) {
-      console.error('Failed to load analytics data:', err);
-    }
-  };
-  
-  const loadAdvancedAnalytics = async (provider, targetAddr) => {
-    try {
-      const oracleResult = await getPoolPriceObservations(provider, targetAddr, [3600, 1800, 0]).catch(() => null);
-      setOracleData(oracleResult);
-    } catch (err) {
-      console.error('Advanced analytics failed:', err);
+      // Analytics loading failed silently
     }
   };
 

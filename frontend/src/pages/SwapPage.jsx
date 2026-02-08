@@ -3,20 +3,13 @@ import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import { X, ArrowDown } from 'lucide-react';
 import { getTokenList, TOKENS, findTokenByAddress } from '../api/tokens';
-import { getPoolList, getFilteredPoolList, updatePoolInList } from '../api/pools';
+import { getFilteredPoolList } from '../api/pools';
 import TokenInputSelector from '../components/ui/TokenInputSelector';
 import PoolInfoCard from '../components/ui/PoolInfoCard';
 import {
-  AMMPOOL_ADDRESS,
-  ensureSepolia,
-  getPool,
-  getTokenInfo,
   getPoolContract,
   swapExactIn,
   estimateSwapOut,
-  checkPoolStatus,
-  createPool, 
-  simulateCreatePool,
 } from '../api/amm';
 
 const Modal = ({ isOpen, onClose, title, children }) => {
