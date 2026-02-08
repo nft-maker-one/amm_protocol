@@ -379,7 +379,7 @@ contract AMMPool is IAMMPool {
     }
 
     function increaseObservationCardinalityNext(uint16 observationCardinalityNext) external override lock {
-        uint16 observationCardinalityNextOld = slot0_.observationCardinalityNext; // for the event
+        // uint16 observationCardinalityNextOld = slot0_.observationCardinalityNext; // for the event
         uint16 observationCardinalityNextNew = observations.grow(
             slot0_.observationIndex,
             slot0_.observationCardinality,

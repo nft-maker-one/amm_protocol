@@ -64,8 +64,8 @@ library Oracle {
         int24 tick,
         uint128 liquidity
     ) private pure returns (Observation memory) {
-        uint32 delta = blockTimestamp - last.blockTimestamp;
         unchecked {
+            uint32 delta = blockTimestamp - last.blockTimestamp;
             return
                 Observation({
                     blockTimestamp: blockTimestamp,
@@ -131,7 +131,10 @@ library Oracle {
             return (last.tickCumulative, last.secondsPerLiquidityCumulativeX128);
         }
 
-        uint32 target = time - secondsAgo;
+        uint32 target;
+        unchecked {
+            target = time - secondsAgo;
+        }
 
         (Observation memory beforeOrAt, Observation memory atOrAfter) = getSurroundingObservations(
             self,
@@ -150,10 +153,11 @@ library Oracle {
             // we're at the right boundary
             return (atOrAfter.tickCumulative, atOrAfter.secondsPerLiquidityCumulativeX128);
         } else {
+        } else {
             // we're in the middle
-            uint32 observationTimeDelta = atOrAfter.blockTimestamp - beforeOrAt.blockTimestamp;
-            uint32 targetDelta = target - beforeOrAt.blockTimestamp;
             unchecked {
+                uint32 observationTimeDelta = atOrAfter.blockTimestamp - beforeOrAt.blockTimestamp;
+                uint32 targetDelta = target - beforeOrAt.blockTimestamp;
                 return (
                     beforeOrAt.tickCumulative +
                         ((atOrAfter.tickCumulative - beforeOrAt.tickCumulative) / int56(uint56(observationTimeDelta))) *
@@ -295,11 +299,11 @@ library Oracle {
     /// @param cardinalityNext The new length of the oracle array, independent of population
     /// @return cardinalityNextOld The old length of the oracle array
     function grow(
-        Observation[65535] storage self,
-        uint16 index,
+        Observation[65535] storage /* self */,
+        uint16 /* index */,
         uint16 cardinality,
         uint16 cardinalityNext
-    ) internal returns (uint16 cardinalityNextOld) {
+    ) internal pure returns (uint16 cardinalityNextOld) {
         cardinalityNextOld = cardinalityNext;
         // no-op if the passed next cardinality isn't greater than the current next cardinality
         if (cardinalityNext <= cardinality) return cardinalityNextOld;
