@@ -28,6 +28,9 @@ library VolatilityOracle {
         // We need at least 2 observations to calculate volatility
         if (observationCardinality < 2) return 0;
         
+        // Ensure we have enough history to calculate volatility
+        if (blockTimestamp < windowSize) return 0;
+
         uint32[] memory secondsAgos = new uint32[](2);
         secondsAgos[0] = windowSize;
         secondsAgos[1] = 0; // consistent with current time
@@ -44,22 +47,15 @@ library VolatilityOracle {
         int56 tickCumulativesStart = tickCumulatives[0];
         int56 tickCumulativesEnd = tickCumulatives[1];
 
-        // volatility = |(tickEnd - tickStart) / time| ? 
-        // TWAP = (tickCumulativesEnd - tickCumulativesStart) / windowSize
-        // That gives us the AVERAGE price over the window.
-        // But volatility is the VARIANCE or deviation.
-        // Calculating true variance requires more data points (sum of squares).
-        // For on-chain gas efficiency, we can use a simpler metric:
-        // Compare the instantaneous price (current tick) vs the TWAP price.
         // volatility ~= |currentTick - TWAP_tick|
-        
-        int56 tickAverage = (tickCumulativesEnd - tickCumulativesStart) / int56(int32(windowSize));
-        
-        int256 deviation = int256(int56(tick)) - int256(tickAverage);
-        if (deviation < 0) {
-            volatility = uint256(-deviation);
-        } else {
-            volatility = uint256(deviation);
+        unchecked {
+             int56 tickAverage = (tickCumulativesEnd - tickCumulativesStart) / int56(int32(windowSize));
+             int256 deviation = int256(tick) - int256(tickAverage);
+             if (deviation < 0) {
+                 volatility = uint256(-deviation);
+             } else {
+                 volatility = uint256(deviation);
+             }
         }
     }
 
