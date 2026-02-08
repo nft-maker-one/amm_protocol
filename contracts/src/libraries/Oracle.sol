@@ -292,8 +292,6 @@ library Oracle {
     }
 
     /// @notice Increase the cardinality of the oracle array
-    /// @param self The stored oracle array
-    /// @param index The index of the observation that was most recently written to the observations array
     /// @param cardinality The number of populated elements in the oracle array
     /// @param cardinalityNext The new length of the oracle array, independent of population
     /// @return cardinalityNextOld The old length of the oracle array
