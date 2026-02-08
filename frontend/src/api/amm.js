@@ -51,6 +51,13 @@ export async function simulateCreatePool(provider, signer, tokenA, tokenB, fee) 
 }
 
 export async function createPool(provider, signer, tokenA, tokenB, fee) {
+  // 验证费用值
+  const VALID_FEES = [500, 3000, 10000];
+  const feeNum = Number(fee);
+  if (!VALID_FEES.includes(feeNum)) {
+    throw new Error(`Invalid fee: ${fee}. Allowed fees are: ${VALID_FEES.join(', ')}`);
+  }
+  
   const factoryWithSigner = getFactory(provider).connect(signer);
   const tx = await factoryWithSigner.createPool(tokenA, tokenB, fee);
   await tx.wait();

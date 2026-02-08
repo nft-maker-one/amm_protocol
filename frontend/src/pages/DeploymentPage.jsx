@@ -236,7 +236,14 @@ const DeploymentPage = () => {
         <div className="fade-in">
           <TokenInputSelector label="Token A" choice={createTokenAChoice} setChoice={setCreateTokenAChoice} customValue={createTokenACustom} setCustomValue={setCreateTokenACustom} tokenList={tokenList} />
           <TokenInputSelector label="Token B" choice={createTokenBChoice} setChoice={setCreateTokenBChoice} customValue={createTokenBCustom} setCustomValue={setCreateTokenBCustom} tokenList={tokenList} />
-          <input type="number" value={createFee} onChange={e=>setCreateFee(e.target.value)} style={{width:'100%', marginBottom:15}} placeholder="Fee (3000)" />
+          <div style={{marginBottom:15}}>
+            <label style={{display:'block', fontSize:'0.9rem', marginBottom:5, color:'#aaa'}}>费用等级</label>
+            <select value={createFee} onChange={e=>setCreateFee(e.target.value)} style={{width:'100%', padding:'8px', background:'#222', color:'#fff', border:'1px solid #444', borderRadius:'4px'}}>
+              <option value="500">500 (0.05%)</option>
+              <option value="3000">3000 (0.3%) - 推荐</option>
+              <option value="10000">10000 (1%)</option>
+            </select>
+          </div>
           <button className="action-btn" onClick={handleCreatePool} disabled={loading}>创建池子</button>
         </div>
       )}
