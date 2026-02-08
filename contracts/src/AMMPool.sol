@@ -8,6 +8,7 @@ import "./libraries/TickMath.sol";
 import "./libraries/LiquidityMath.sol";
 import "./libraries/Oracle.sol";
 import "./libraries/VolatilityOracle.sol";
+import "forge-std/console.sol";
 
 contract AMMPool is IAMMPool {
     using SafeERC20 for IERC20;
@@ -248,13 +249,16 @@ contract AMMPool is IAMMPool {
         );
 
         bool exactInput = amountSpecified > 0;
+        console.log("Swap started. ExactInput:", exactInput);
 
         if (exactInput) {
             uint256 amountIn = uint256(amountSpecified);
+            console.log("AmountIn:", amountIn);
             
             {
                 uint24 currentFee = fee;
                 if (slot0_.observationCardinality > 1) {
+                     console.log("Calculating volatility...");
                      uint256 volatility = VolatilityOracle.calculateVolatility(
                          observations,
                          uint32(block.timestamp),
@@ -264,11 +268,15 @@ contract AMMPool is IAMMPool {
                          slot0_.observationCardinality,
                          300 // 5 minute window
                      );
+                     console.log("Volatility calculated:", volatility);
                      currentFee = VolatilityOracle.getDynamicFee(volatility, fee);
+                     console.log("Dynamic Fee:", currentFee);
                 }
 
                 uint256 feeAmount = (amountIn * currentFee) / 1000000;
+                console.log("Fee Amount:", feeAmount);
                 amountIn = amountIn - feeAmount;
+                console.log("AmountIn after fee:", amountIn);
             }
 
             // Simple constant product for basic functionality
