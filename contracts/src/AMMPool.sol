@@ -252,22 +252,24 @@ contract AMMPool is IAMMPool {
         if (exactInput) {
             uint256 amountIn = uint256(amountSpecified);
             
-            uint24 currentFee = fee;
-            if (slot0_.observationCardinality > 1) {
-                 uint256 volatility = VolatilityOracle.calculateVolatility(
-                     observations,
-                     uint32(block.timestamp),
-                     slot0_.tick,
-                     slot0_.observationIndex,
-                     liquidity,
-                     slot0_.observationCardinality,
-                     300 // 5 minute window
-                 );
-                 currentFee = VolatilityOracle.getDynamicFee(volatility, fee);
-            }
+            {
+                uint24 currentFee = fee;
+                if (slot0_.observationCardinality > 1) {
+                     uint256 volatility = VolatilityOracle.calculateVolatility(
+                         observations,
+                         uint32(block.timestamp),
+                         slot0_.tick,
+                         slot0_.observationIndex,
+                         liquidity,
+                         slot0_.observationCardinality,
+                         300 // 5 minute window
+                     );
+                     currentFee = VolatilityOracle.getDynamicFee(volatility, fee);
+                }
 
-            uint256 feeAmount = (amountIn * currentFee) / 1000000;
-            amountIn = amountIn - feeAmount;
+                uint256 feeAmount = (amountIn * currentFee) / 1000000;
+                amountIn = amountIn - feeAmount;
+            }
 
             // Simple constant product for basic functionality
             uint256 balance0 = IERC20(token0).balanceOf(address(this));
