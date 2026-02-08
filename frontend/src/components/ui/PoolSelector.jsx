@@ -15,7 +15,6 @@ const PoolSelector = ({ onPoolSelect, selectedPool, allowEmpty = false, showCrea
     const poolList = getFilteredPoolList();
     setPools(poolList);
     
-    // 如果没有选中的池子，尝试加载上次选择的
     if (!selectedPool && poolList.length > 0) {
       const lastSelected = getSelectedPool();
       if (lastSelected) {
@@ -51,10 +50,10 @@ const PoolSelector = ({ onPoolSelect, selectedPool, allowEmpty = false, showCrea
       await ensureSepolia(provider);
       
       await refreshPoolStatus(provider, poolAddress);
-      loadPools(); // 重新加载列表
+      loadPools(); 
       
     } catch (err) {
-      console.warn('刷新池子状态失败:', err);
+      console.warn('Failed to refresh pool status:', err);
     } finally {
       setLoading(false);
     }
@@ -68,12 +67,12 @@ const PoolSelector = ({ onPoolSelect, selectedPool, allowEmpty = false, showCrea
           onChange={handlePoolChange}
           style={{flex: 1}}
         >
-          {allowEmpty && <option value="">选择池子...</option>}
-          {pools.length === 0 && !allowEmpty && <option value="">暂无已创建的池子</option>}
+          {allowEmpty && <option value="">Select Pool...</option>}
+          {pools.length === 0 && !allowEmpty && <option value="">No pools available</option>}
           {pools.map(pool => (
             <option key={pool.address} value={pool.address}>
               {getPoolDisplayName(pool)} - {pool.address.slice(0,8)}...
-              {pool.isInitialized ? ' ✅' : ' ⚠️未初始化'}
+              {pool.isInitialized ? ' (Active)' : ' (Uninitialized)'}
             </option>
           ))}
         </select>
@@ -92,7 +91,7 @@ const PoolSelector = ({ onPoolSelect, selectedPool, allowEmpty = false, showCrea
               cursor: loading ? 'wait' : 'pointer'
             }}
           >
-            {loading ? '🔄' : '🔄'}
+            {loading ? 'Syncing...' : 'Sync'}
           </button>
         )}
         
@@ -109,7 +108,7 @@ const PoolSelector = ({ onPoolSelect, selectedPool, allowEmpty = false, showCrea
               cursor: 'pointer'
             }}
           >
-            ➕ 创建新池子
+            Create New Pool
           </button>
         )}
       </div>
@@ -123,17 +122,17 @@ const PoolSelector = ({ onPoolSelect, selectedPool, allowEmpty = false, showCrea
           fontSize: '12px'
         }}>
           <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px'}}>
-            <div><strong>池子地址:</strong> {selectedPool.address.slice(0,8)}...{selectedPool.address.slice(-6)}</div>
-            <div><strong>费率:</strong> {(selectedPool.fee/10000).toFixed(2)}%</div>
-            <div><strong>Token0:</strong> {selectedPool.token0Meta?.symbol || selectedPool.token0.slice(0,8)}</div>
-            <div><strong>Token1:</strong> {selectedPool.token1Meta?.symbol || selectedPool.token1.slice(0,8)}</div>
-            <div><strong>状态:</strong> 
-              <span style={{color: selectedPool.isInitialized ? '#4ade80' : '#f59e0b'}}>
-                {selectedPool.isInitialized ? ' ✅ 已初始化' : ' ⚠️ 未初始化'}
+            <div><strong>Address:</strong> {selectedPool.address.slice(0,8)}...{selectedPool.address.slice(-6)}</div>
+            <div><strong>Fee Tier:</strong> {(selectedPool.fee/10000).toFixed(2)}%</div>
+            <div><strong>Token 0:</strong> {selectedPool.token0Meta?.symbol || selectedPool.token0.slice(0,8)}</div>
+            <div><strong>Token 1:</strong> {selectedPool.token1Meta?.symbol || selectedPool.token1.slice(0,8)}</div>
+            <div><strong>Status:</strong> 
+              <span style={{color: selectedPool.isInitialized ? '#4ade80' : '#f59e0b', marginLeft: '4px'}}>
+                {selectedPool.isInitialized ? 'Active' : 'Pending Initialization'}
               </span>
             </div>
             {selectedPool.currentTick && (
-              <div><strong>当前Tick:</strong> {selectedPool.currentTick}</div>
+              <div><strong>Current Tick:</strong> {selectedPool.currentTick}</div>
             )}
           </div>
         </div>

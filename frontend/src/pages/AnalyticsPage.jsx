@@ -35,7 +35,6 @@ import {
   LiquidityChart, 
 } from '../components';
 
-// --- 通用 Modal (保持一致性) ---
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
@@ -54,7 +53,6 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 };
 
 const AnalyticsPage = () => {
-  // --- 2. 状态管理升级 ---
   const [selectedPool, setSelectedPool] = useState(null);
   const [poolList, setPoolList] = useState([]);
   const [isPoolModalOpen, setIsPoolModalOpen] = useState(false);
@@ -62,7 +60,6 @@ const AnalyticsPage = () => {
   const [poolAddr, setPoolAddr] = useState(AMMPOOL_ADDRESS);
   const [tickQuery, setTickQuery] = useState('0');
   
-  // 数据状态
   const [poolData, setPoolData] = useState(null);
   const [tickData, setTickData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -73,21 +70,17 @@ const AnalyticsPage = () => {
   const [priceHistory, setPriceHistory] = useState([]);
   const [liquidityDistribution, setLiquidityDistribution] = useState([]);
   
-  // 高级数据
   const [oracleData, setOracleData] = useState(null);
   const [priceImpactData, setPriceImpactData] = useState(null);
   
-  // 计算器状态
   const [initialPrice, setInitialPrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
   const [swapAmount, setSwapAmount] = useState('');
   const [swapDirection, setSwapDirection] = useState(true);
 
-  // 初始化加载
   useEffect(() => {
     const list = getFilteredPoolList();
     setPoolList(list);
-    // 默认选中第一个池子并自动加载数据
     if (list.length > 0 && !selectedPool) {
       handlePoolSelect(list[0]);
     }
@@ -98,21 +91,19 @@ const AnalyticsPage = () => {
     return calculatePrice(sqrtPriceX96);
   };
 
-  // --- 3. 选择池子逻辑优化 ---
   const handlePoolSelect = (pool) => {
     setSelectedPool(pool);
     setPoolAddr(pool.address);
     setIsPoolModalOpen(false);
-    // 选中后自动触发查询，用户体验更好
     handleQueryPool(pool.address); 
   };
 
   const handleQueryPool = async (addressOverride) => {
     const targetAddr = addressOverride || poolAddr;
-    if (!window.ethereum) return toast.error('请先连接钱包');
-    if (!ethers.isAddress(targetAddr)) return toast.error('Pool 地址无效');
+    if (!window.ethereum) return toast.error('Please connect wallet first');
+    if (!ethers.isAddress(targetAddr)) return toast.error('Invalid Pool address');
     
-    const toastId = toast.loading('正在加载链上数据...');
+    const toastId = toast.loading('Loading on-chain data...');
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
@@ -143,9 +134,9 @@ const AnalyticsPage = () => {
       
       await loadMarketAnalytics(provider, targetAddr);
       
-      toast.success('数据加载完成', { id: toastId });
+      toast.success('Data loaded successfully', { id: toastId });
     } catch (err) {
-      toast.error('查询失败: ' + err.message, { id: toastId });
+      toast.error('Query failed: ' + err.message, { id: toastId });
     } finally {
       setLoading(false);
     }
@@ -169,7 +160,7 @@ const AnalyticsPage = () => {
 
       await loadAdvancedAnalytics(provider, targetAddr);
     } catch (err) {
-      console.error('分析数据加载失败:', err);
+      console.error('Failed to load analytics data:', err);
     }
   };
   
@@ -178,46 +169,46 @@ const AnalyticsPage = () => {
       const oracleResult = await getPoolPriceObservations(provider, targetAddr, [3600, 1800, 0]).catch(() => null);
       setOracleData(oracleResult);
     } catch (err) {
-      console.error('高级分析失败:', err);
+      console.error('Advanced analytics failed:', err);
     }
   };
 
   const handleCalculatePriceImpact = async () => {
-    if (!window.ethereum || !poolAddr || !swapAmount) return toast.error('请输入数量并连接钱包');
-    const toastId = toast.loading('计算滑点...');
+    if (!window.ethereum || !poolAddr || !swapAmount) return toast.error('Please input amount and connect wallet');
+    const toastId = toast.loading('Calculating impact...');
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const amountWei = ethers.parseEther(swapAmount);
       const impact = await calculatePriceImpact(provider, poolAddr, amountWei, swapDirection);
       setPriceImpactData(impact);
-      toast.success('计算完成', { id: toastId });
+      toast.success('Calculation complete', { id: toastId });
     } catch (err) {
-      toast.error('计算失败: ' + err.message, { id: toastId });
+      toast.error('Calculation failed: ' + err.message, { id: toastId });
     }
   };
   
   const handleCalculateIL = () => {
-    if (!initialPrice || !currentPrice) return toast.error('请输入价格');
+    if (!initialPrice || !currentPrice) return toast.error('Please input prices');
     const initial = parseFloat(initialPrice);
     const current = parseFloat(currentPrice);
-    if (initial <= 0 || current <= 0) return toast.error('价格必须大于0');
+    if (initial <= 0 || current <= 0) return toast.error('Price must be greater than 0');
     const loss = calculateImpermanentLoss(initial, current);
     setImpermanentLossData({ loss, initial, current });
   };
 
   const handleQueryTick = async () => {
-    if (!window.ethereum) return toast.error('请先连接钱包');
-    if (!tickQuery) return toast.error('请输入 Tick Index');
-    const toastId = toast.loading(`查询 Tick ${tickQuery}...`);
+    if (!window.ethereum) return toast.error('Please connect wallet first');
+    if (!tickQuery) return toast.error('Please input Tick Index');
+    const toastId = toast.loading(`Querying Tick ${tickQuery}...`);
     try {
       setLoading(true);
       const provider = new ethers.BrowserProvider(window.ethereum);
       await ensureSepolia(provider);
       const tickInfo = await getTickInfo(provider, poolAddr, Number(tickQuery));
       setTickData(tickInfo);
-      toast.success('Tick 数据已获取', { id: toastId });
+      toast.success('Tick data fetched', { id: toastId });
     } catch (err) {
-      toast.error('查询 Tick 失败', { id: toastId });
+      toast.error('Tick query failed', { id: toastId });
     } finally {
       setLoading(false);
     }
@@ -225,14 +216,13 @@ const AnalyticsPage = () => {
 
   return (
     <div className="container">
-      <h2 style={{display:'flex', alignItems:'center', gap:10}}><Activity size={24}/> 市场分析大屏</h2>
+      <h2 style={{display:'flex', alignItems:'center', gap:10}}><Activity size={24}/> Market Analytics</h2>
       
-      {/* 1. 顶部数据源选择 - 已重构为统一风格 */}
       <div style={{ marginBottom: '20px' }}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10}}>
-           <h4 style={{margin:0, color:'#888', fontSize:'0.9rem'}}>当前分析交易对</h4>
+           <h4 style={{margin:0, color:'#888', fontSize:'0.9rem'}}>Current Trading Pair</h4>
            <button onClick={() => handleQueryPool()} disabled={loading} style={{background:'none', border:'none', color:'#646cff', cursor:'pointer', display:'flex', alignItems:'center', gap:5, fontSize:'0.85rem'}}>
-              <RefreshCw size={14} className={loading ? 'spin' : ''}/> 刷新数据
+              <RefreshCw size={14} className={loading ? 'spin' : ''}/> Refresh
            </button>
         </div>
 
@@ -248,53 +238,51 @@ const AnalyticsPage = () => {
              onClick={() => setIsPoolModalOpen(true)} 
              style={{padding:20, border:'2px dashed #444', borderRadius:12, textAlign:'center', cursor:'pointer', color:'#aaa'}}
           >
-             + 点击选择要分析的交易对
+             + Select a trading pair to analyze
           </div>
         )}
       </div>
 
-      {/* 2. 第一排：核心指标卡片 */}
       <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '15px', marginBottom: '20px'}}>
         <div className="data-card">
           <div style={{display:'flex', justifyContent:'space-between', color:'#aaa', marginBottom:5}}>
-              <span>总锁定价值 (TVL)</span><PieChart size={18}/>
+             <span>Total Value Locked (TVL)</span><PieChart size={18}/>
           </div>
           <div style={{fontSize:'1.8rem', fontWeight:'bold'}}>
-              ${tvlData?.totalTVL ? tvlData.totalTVL.toLocaleString(undefined, {minimumFractionDigits:2}) : '0.00'}
+             ${tvlData?.totalTVL ? tvlData.totalTVL.toLocaleString(undefined, {minimumFractionDigits:2}) : '0.00'}
           </div>
           {tvlData && <div style={{fontSize:'0.8rem', color:'#666', marginTop:5}}>T0: ${tvlData.token0TVL.toFixed(0)} / T1: ${tvlData.token1TVL.toFixed(0)}</div>}
         </div>
 
         <div className="data-card">
           <div style={{display:'flex', justifyContent:'space-between', color:'#aaa', marginBottom:5}}>
-              <span>24h 交易量</span><BarChart2 size={18}/>
+             <span>24h Volume</span><BarChart2 size={18}/>
           </div>
           <div style={{fontSize:'1.8rem', fontWeight:'bold'}}>
-              {volumeData?.swapCount || 0} <span style={{fontSize:'1rem', fontWeight:'normal', color:'#666'}}>txs</span>
+             {volumeData?.swapCount || 0} <span style={{fontSize:'1rem', fontWeight:'normal', color:'#666'}}>txs</span>
           </div>
           {volumeData && <div style={{fontSize:'0.8rem', color:'#666', marginTop:5}}>Vol0: {ethers.formatEther(volumeData.volume0||0n).slice(0,6)}</div>}
         </div>
 
         <div className="data-card">
            <div style={{display:'flex', justifyContent:'space-between', color:'#aaa', marginBottom:5}}>
-              <span>价格趋势</span><TrendingUp size={18}/>
+             <span>Price Trend</span><TrendingUp size={18}/>
           </div>
            {marketData ? (
              <div>
                 <div style={{fontSize:'1.5rem', fontWeight:'bold', color: marketData.trend === 'up' ? '#4ade80' : marketData.trend === 'down' ? '#ef4444' : '#fbbf24'}}>
-                   {marketData.trend === 'up' ? '↗ 上涨' : marketData.trend === 'down' ? '↘ 下跌' : '→ 平稳'}
+                   {marketData.trend === 'up' ? 'Up' : marketData.trend === 'down' ? 'Down' : 'Stable'}
                 </div>
                 <div style={{fontSize:'0.8rem', color:'#666', marginTop:5}}>Current Price</div>
              </div>
-           ) : (<div style={{color:'#666', marginTop:10}}>暂无数据</div>)}
+           ) : (<div style={{color:'#666', marginTop:10}}>No Data</div>)}
         </div>
       </div>
 
-      {/* 3. 详情与图表区域 */}
       <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(350px, 1fr))', gap:20, marginBottom: 20}}>
           {poolData && (
             <div className="data-card">
-               <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><Layers size={18}/> 核心合约数据</h4>
+               <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><Layers size={18}/> Core Contract Data</h4>
                <div style={{fontSize:'0.9rem', lineHeight: '1.8'}}>
                   <div style={{display:'flex', justifyContent:'space-between'}}><span>Token0:</span> <b>{poolData.token0Meta?.symbol}</b></div>
                   <div style={{display:'flex', justifyContent:'space-between'}}><span>Token1:</span> <b>{poolData.token1Meta?.symbol}</b></div>
@@ -308,7 +296,7 @@ const AnalyticsPage = () => {
 
            {priceHistory.length > 0 && (
             <div className="data-card">
-               <h4 style={{marginTop:0}}>📊 实时价格走势</h4>
+               <h4 style={{marginTop:0}}>Real-time Price History</h4>
                <PriceChart 
                  data={priceHistory.map(swap => ({
                    timestamp: Number(swap.blockTimestamp || Date.now() / 1000),
@@ -322,22 +310,20 @@ const AnalyticsPage = () => {
 
            {liquidityDistribution.length > 0 && (
              <div className="data-card">
-               <h4 style={{marginTop:0}}>💧 流动性深度分布</h4>
+               <h4 style={{marginTop:0}}>Liquidity Depth Distribution</h4>
                <LiquidityChart data={liquidityDistribution} currentTick={poolData ? Number(poolData.tick) : null} />
              </div>
            )}
       </div>
 
-      {/* 4. 工具栏区域 */}
-      <h3 style={{margin: '30px 0 15px 0', borderBottom: '1px solid #333', paddingBottom: 10}}>🛠️ 高级分析工具</h3>
+      <h3 style={{margin: '30px 0 15px 0', borderBottom: '1px solid #333', paddingBottom: 10}}>Advanced Analytics Tools</h3>
       
       <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))', gap:20}}>
            
-           {/* 工具 1: 价格影响计算器 */}
            <div className="data-card" style={{borderTop: '3px solid #646cff'}}>
-              <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><Calculator size={18}/> 价格影响计算</h4>
+              <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><Calculator size={18}/> Price Impact Calculator</h4>
               <div className="input-group">
-                 <label>输入数量</label>
+                 <label>Input Amount</label>
                  <input value={swapAmount} onChange={e => setSwapAmount(e.target.value)} placeholder="0.0"/>
               </div>
               <div className="input-group">
@@ -347,7 +333,7 @@ const AnalyticsPage = () => {
                  </select>
               </div>
               <button className="action-btn" onClick={handleCalculatePriceImpact} disabled={loading} style={{marginTop:10}}>
-                 计算滑点
+                 Calculate Impact
               </button>
               {priceImpactData && (
                 <div style={{marginTop:15, padding:10, background:'#111', borderRadius:6, fontSize:'0.9rem'}}>
@@ -362,21 +348,20 @@ const AnalyticsPage = () => {
               )}
            </div>
 
-           {/* 工具 2: 无常损失计算器 */}
            <div className="data-card" style={{borderTop: '3px solid #e63946'}}>
-              <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><AlertTriangle size={18}/> 无常损失预估</h4>
+              <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><AlertTriangle size={18}/> Impermanent Loss Estimator</h4>
               <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}}>
                  <div className="input-group">
-                    <label>初始价</label>
+                    <label>Initial Price</label>
                     <input value={initialPrice} onChange={e => setInitialPrice(e.target.value)} placeholder="1000"/>
                  </div>
                  <div className="input-group">
-                    <label>当前价</label>
+                    <label>Current Price</label>
                     <input value={currentPrice} onChange={e => setCurrentPrice(e.target.value)} placeholder="1100"/>
                  </div>
               </div>
               <button className="action-btn" onClick={handleCalculateIL} style={{marginTop:10, background:'#333'}}>
-                 计算损失
+                 Calculate Loss
               </button>
               {impermanentLossData && (
                  <div style={{marginTop:15, textAlign:'center'}}>
@@ -388,9 +373,8 @@ const AnalyticsPage = () => {
               )}
            </div>
 
-           {/* 工具 3: Tick 查询 */}
            <div className="data-card" style={{borderTop: '3px solid #fbbf24'}}>
-              <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><Search size={18}/> Tick 放大镜</h4>
+              <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><Search size={18}/> Tick Lens</h4>
               <div className="input-group" style={{display:'flex', gap:5}}>
                  <input value={tickQuery} onChange={e => setTickQuery(e.target.value)} placeholder="Tick Index" style={{flex:1}}/>
                  <button onClick={handleQueryTick} style={{padding:'0 10px'}}><ArrowRight size={16}/></button>
@@ -412,10 +396,9 @@ const AnalyticsPage = () => {
            </div>
       </div>
       
-      {/* 5. 交易历史记录 */}
       {priceHistory.length > 0 && (
         <div className="data-card" style={{marginTop: 20}}>
-           <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><Info size={18}/> 最新成交记录</h4>
+           <h4 style={{marginTop:0, display:'flex', alignItems:'center', gap:8}}><Info size={18}/> Latest Transactions</h4>
            <div style={{overflowX:'auto'}}>
              <table style={{width:'100%', fontSize:'0.9rem', borderCollapse:'collapse'}}>
                <thead>
@@ -441,8 +424,7 @@ const AnalyticsPage = () => {
         </div>
       )}
 
-      {/* 弹窗 */}
-      <Modal isOpen={isPoolModalOpen} onClose={() => setIsPoolModalOpen(false)} title="选择要分析的交易对">
+      <Modal isOpen={isPoolModalOpen} onClose={() => setIsPoolModalOpen(false)} title="Select Trading Pair">
          {poolList.map(p => (
             <PoolInfoCard key={p.address} pool={p} isActive={selectedPool?.address === p.address} onClick={() => handlePoolSelect(p)} />
          ))}

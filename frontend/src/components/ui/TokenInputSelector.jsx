@@ -19,18 +19,18 @@ const TokenInputSelector = ({
           disabled={disabled}
           style={{ width: '100%' }}
         >
-          <option value="">-- 选择 Token --</option>
+          <option value="">-- Select Token --</option>
           {tokenList.map((t) => (
             <option key={t.address} value={t.address}>
               {t.symbol} ({t.address.slice(0, 6)}...)
             </option>
           ))}
-          <option value="custom">自定义地址...</option>
+          <option value="custom">Custom Address...</option>
         </select>
         
         {choice === 'custom' && (
           <input 
-            placeholder="请输入 0x 开头的合约地址" 
+            placeholder="Enter contract address starting with 0x" 
             value={customValue} 
             onChange={(e) => setCustomValue(e.target.value)}
             disabled={disabled}
