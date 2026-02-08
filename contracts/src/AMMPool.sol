@@ -279,12 +279,12 @@ contract AMMPool is IAMMPool {
             if (zeroForOne) {
                 // Selling token0 for token1
                 amountOut = (amountIn * balance1) / (balance0 + amountIn);
-                amount0 = int256(amountIn + feeAmount);
+                amount0 = amountSpecified;
                 amount1 = -int256(amountOut);
             } else {
                 // Selling token1 for token0
                 amountOut = (amountIn * balance0) / (balance1 + amountIn);
-                amount1 = int256(amountIn + feeAmount);
+                amount1 = amountSpecified;
                 amount0 = -int256(amountOut);
             }
 
