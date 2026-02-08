@@ -6,9 +6,12 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IAMMPool.sol";
 import "./libraries/TickMath.sol";
 import "./libraries/LiquidityMath.sol";
+import "./libraries/Oracle.sol";
+import "./libraries/VolatilityOracle.sol";
 
 contract AMMPool is IAMMPool {
     using SafeERC20 for IERC20;
+    using Oracle for Oracle.Observation[65535];
 
     struct Slot0 {
         uint160 sqrtPriceX96;
@@ -47,6 +50,7 @@ contract AMMPool is IAMMPool {
 
     mapping(bytes32 => Position) public override positions;
     mapping(int24 => TickInfo) public override ticks;
+    Oracle.Observation[65535] public override observations;
 
     modifier lock() {
         require(!_locked, "Locked");
@@ -86,6 +90,17 @@ contract AMMPool is IAMMPool {
             feeProtocol: 0,
             unlocked: true  // Keep for compatibility but not used for locking
         });
+
+        (slot0_.observationIndex, slot0_.observationCardinality) = observations.write(
+            Oracle.WriteParams({
+                blockTimestamp: uint32(block.timestamp),
+                tick: tick,
+                liquidity: 0,
+                index: 0,
+                cardinality: 1,
+                cardinalityNext: 1
+            })
+        );
 
         emit Initialize(sqrtPriceX96, tick);
     }
@@ -214,6 +229,17 @@ contract AMMPool is IAMMPool {
 
         Slot0 memory slot0Start = slot0_;
 
+        (slot0_.observationIndex, slot0_.observationCardinality) = observations.write(
+            Oracle.WriteParams({
+                blockTimestamp: uint32(block.timestamp),
+                tick: slot0Start.tick,
+                liquidity: liquidity,
+                index: slot0Start.observationIndex,
+                cardinality: slot0Start.observationCardinality,
+                cardinalityNext: slot0Start.observationCardinalityNext
+            })
+        );
+
         require(
             zeroForOne
                 ? sqrtPriceLimitX96 < slot0Start.sqrtPriceX96 && sqrtPriceLimitX96 > TickMath.MIN_SQRT_RATIO
@@ -225,7 +251,22 @@ contract AMMPool is IAMMPool {
 
         if (exactInput) {
             uint256 amountIn = uint256(amountSpecified);
-            uint256 feeAmount = (amountIn * fee) / 1000000;
+            
+            uint24 currentFee = fee;
+            if (slot0_.observationCardinality > 1) {
+                 uint256 volatility = VolatilityOracle.calculateVolatility(
+                     observations,
+                     uint32(block.timestamp),
+                     slot0_.tick,
+                     slot0_.observationIndex,
+                     liquidity,
+                     slot0_.observationCardinality,
+                     300 // 5 minute window
+                 );
+                 currentFee = VolatilityOracle.getDynamicFee(volatility, fee);
+            }
+
+            uint256 feeAmount = (amountIn * currentFee) / 1000000;
             amountIn = amountIn - feeAmount;
 
             // Simple constant product for basic functionality
@@ -333,6 +374,34 @@ contract AMMPool is IAMMPool {
         if (liquidityGrossBefore == 0) {
             tickInfo.initialized = true;
         }
+    }
+
+    function increaseObservationCardinalityNext(uint16 observationCardinalityNext) external override lock {
+        uint16 observationCardinalityNextOld = slot0_.observationCardinalityNext; // for the event
+        uint16 observationCardinalityNextNew = observations.grow(
+            slot0_.observationIndex,
+            slot0_.observationCardinality,
+            observationCardinalityNext
+        );
+        slot0_.observationCardinalityNext = observationCardinalityNextNew;
+        // emit IncreaseObservationCardinalityNext(observationCardinalityNextOld, observationCardinalityNextNew);
+    }
+
+    function observe(uint32[] calldata secondsAgos)
+        external
+        view
+        override
+        returns (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s)
+    {
+        return
+            observations.observe(
+                uint32(block.timestamp),
+                secondsAgos,
+                slot0_.tick,
+                slot0_.observationIndex,
+                liquidity,
+                slot0_.observationCardinality
+            );
     }
 
     function _getAmountOut(

@@ -141,4 +141,21 @@ interface IAMMPool {
         uint128 amount0Requested,
         uint128 amount1Requested
     ) external returns (uint128 amount0, uint128 amount1);
+
+    function observations(uint256 index)
+        external
+        view
+        returns (
+            uint32 blockTimestamp,
+            int56 tickCumulative,
+            uint160 secondsPerLiquidityCumulativeX128,
+            bool initialized
+        );
+
+    function increaseObservationCardinalityNext(uint16 observationCardinalityNext) external;
+
+    function observe(uint32[] calldata secondsAgos)
+        external
+        view
+        returns (int56[] memory tickCumulatives, uint160[] memory secondsPerLiquidityCumulativeX128s);
 }
