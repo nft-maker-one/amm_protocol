@@ -153,7 +153,6 @@ library Oracle {
             // we're at the right boundary
             return (atOrAfter.tickCumulative, atOrAfter.secondsPerLiquidityCumulativeX128);
         } else {
-        } else {
             // we're in the middle
             unchecked {
                 uint32 observationTimeDelta = atOrAfter.blockTimestamp - beforeOrAt.blockTimestamp;
