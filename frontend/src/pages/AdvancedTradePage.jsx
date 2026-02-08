@@ -106,9 +106,16 @@ const AdvancedTradePage = () => {
           }
           
           const quote = await router.getRouteQuote(route, amountIn);
+          
+          // Validate that output is meaningful (reject if less than 1 wei worth)
+          if (!quote.amountOut || quote.amountOut <= 0n) {
+            throw new Error('Output is 0 - pool lacks liquidity. Add liquidity first.');
+          }
+          
+          const formattedOut = ethers.formatEther(quote.amountOut);
           const routeData = {
              index: i + 1, path: route.tokens.join(' -> '), fees: route.fees, hops: route.hops,
-             amountOut: ethers.formatEther(quote.amountOut), priceImpact: quote.priceImpact,
+             amountOut: formattedOut, priceImpact: quote.priceImpact,
              estimatedGas: quote.gas, poolValidation, success: true
           };
           
@@ -264,7 +271,12 @@ const AdvancedTradePage = () => {
                 <h5 style={{margin: '0 0 10px 0', color: '#4ade80'}}>Best Route</h5>
                 <div style={{fontSize: '0.9rem', lineHeight: '1.6'}}>
                   <div><strong>Path:</strong> {routingResult.bestRoute.path}</div>
-                  <div><strong>Output:</strong> {Number(routingResult.bestRoute.amountOut).toFixed(6)} tokens</div>
+                  <div><strong>Output:</strong> {(() => {
+                    const val = Number(routingResult.bestRoute.amountOut);
+                    if (val === 0) return '0 (no liquidity)';
+                    if (val < 0.000001) return val.toExponential(4);
+                    return val.toFixed(6);
+                  })()} tokens</div>
                   <div><strong>Gas est:</strong> {routingResult.bestRoute.estimatedGas?.toLocaleString()}</div>
                 </div>
               </div>
@@ -285,7 +297,7 @@ const AdvancedTradePage = () => {
                       
                       {route.success ? (
                         <div style={{fontSize: '0.8rem', color: '#aaa', lineHeight: '1.5'}}>
-                          <div>Output: {Number(route.amountOut).toFixed(6)}</div>
+                          <div>Output: {Number(route.amountOut) < 0.000001 ? Number(route.amountOut).toExponential(4) : Number(route.amountOut).toFixed(6)}</div>
                           <div>Gas: {route.estimatedGas?.toLocaleString() || 'N/A'}</div>
                           {route.poolValidation && route.poolValidation.length > 0 && (
                             <div style={{marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #444'}}>
