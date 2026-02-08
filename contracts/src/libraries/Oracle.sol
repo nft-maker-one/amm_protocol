@@ -65,14 +65,16 @@ library Oracle {
         uint128 liquidity
     ) private pure returns (Observation memory) {
         uint32 delta = blockTimestamp - last.blockTimestamp;
-        return
-            Observation({
-                blockTimestamp: blockTimestamp,
-                tickCumulative: last.tickCumulative + int56(tick) * int56(uint56(delta)),
-                secondsPerLiquidityCumulativeX128: last.secondsPerLiquidityCumulativeX128 +
-                    ((uint160(delta) << 128) / (liquidity > 0 ? liquidity : 1)),
-                initialized: true
-            });
+        unchecked {
+            return
+                Observation({
+                    blockTimestamp: blockTimestamp,
+                    tickCumulative: last.tickCumulative + int56(tick) * int56(uint56(delta)),
+                    secondsPerLiquidityCumulativeX128: last.secondsPerLiquidityCumulativeX128 +
+                        ((uint160(delta) << 128) / (liquidity > 0 ? liquidity : 1)),
+                    initialized: true
+                });
+        }
     }
 
     /// @notice Returns the accumulator values as of each time in the array of secondsAgos
@@ -151,16 +153,18 @@ library Oracle {
             // we're in the middle
             uint32 observationTimeDelta = atOrAfter.blockTimestamp - beforeOrAt.blockTimestamp;
             uint32 targetDelta = target - beforeOrAt.blockTimestamp;
-            return (
-                beforeOrAt.tickCumulative +
-                    ((atOrAfter.tickCumulative - beforeOrAt.tickCumulative) / int56(uint56(observationTimeDelta))) *
-                    int56(uint56(targetDelta)),
-                beforeOrAt.secondsPerLiquidityCumulativeX128 +
-                    uint160(
-                        (uint256(atOrAfter.secondsPerLiquidityCumulativeX128 - beforeOrAt.secondsPerLiquidityCumulativeX128) *
-                            targetDelta) / observationTimeDelta
-                    )
-            );
+            unchecked {
+                return (
+                    beforeOrAt.tickCumulative +
+                        ((atOrAfter.tickCumulative - beforeOrAt.tickCumulative) / int56(uint56(observationTimeDelta))) *
+                        int56(uint56(targetDelta)),
+                    beforeOrAt.secondsPerLiquidityCumulativeX128 +
+                        uint160(
+                            (uint256(atOrAfter.secondsPerLiquidityCumulativeX128 - beforeOrAt.secondsPerLiquidityCumulativeX128) *
+                                targetDelta) / observationTimeDelta
+                        )
+                );
+            }
         }
     }
 

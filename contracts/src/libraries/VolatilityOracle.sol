@@ -27,8 +27,6 @@ library VolatilityOracle {
     ) internal view returns (uint256 volatility) {
         // We need at least 2 observations to calculate volatility
         if (observationCardinality < 2) return 0;
-
-        uint32 timeStart = blockTimestamp - windowSize;
         
         uint32[] memory secondsAgos = new uint32[](2);
         secondsAgos[0] = windowSize;
