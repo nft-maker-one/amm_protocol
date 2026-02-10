@@ -64,15 +64,17 @@ library Oracle {
         int24 tick,
         uint128 liquidity
     ) private pure returns (Observation memory) {
-        uint32 delta = blockTimestamp - last.blockTimestamp;
-        return
-            Observation({
-                blockTimestamp: blockTimestamp,
-                tickCumulative: last.tickCumulative + int56(tick) * int56(uint56(delta)),
-                secondsPerLiquidityCumulativeX128: last.secondsPerLiquidityCumulativeX128 +
-                    ((uint160(delta) << 128) / (liquidity > 0 ? liquidity : 1)),
-                initialized: true
-            });
+        unchecked {
+            uint32 delta = blockTimestamp - last.blockTimestamp;
+            return
+                Observation({
+                    blockTimestamp: blockTimestamp,
+                    tickCumulative: last.tickCumulative + int56(tick) * int56(uint56(delta)),
+                    secondsPerLiquidityCumulativeX128: last.secondsPerLiquidityCumulativeX128 +
+                        ((uint160(delta) << 128) / (liquidity > 0 ? liquidity : 1)),
+                    initialized: true
+                });
+        }
     }
 
     /// @notice Returns the accumulator values as of each time in the array of secondsAgos
@@ -129,7 +131,10 @@ library Oracle {
             return (last.tickCumulative, last.secondsPerLiquidityCumulativeX128);
         }
 
-        uint32 target = time - secondsAgo;
+        uint32 target;
+        unchecked {
+            target = time - secondsAgo;
+        }
 
         (Observation memory beforeOrAt, Observation memory atOrAfter) = getSurroundingObservations(
             self,
@@ -149,18 +154,20 @@ library Oracle {
             return (atOrAfter.tickCumulative, atOrAfter.secondsPerLiquidityCumulativeX128);
         } else {
             // we're in the middle
-            uint32 observationTimeDelta = atOrAfter.blockTimestamp - beforeOrAt.blockTimestamp;
-            uint32 targetDelta = target - beforeOrAt.blockTimestamp;
-            return (
-                beforeOrAt.tickCumulative +
-                    ((atOrAfter.tickCumulative - beforeOrAt.tickCumulative) / int56(uint56(observationTimeDelta))) *
-                    int56(uint56(targetDelta)),
-                beforeOrAt.secondsPerLiquidityCumulativeX128 +
-                    uint160(
-                        (uint256(atOrAfter.secondsPerLiquidityCumulativeX128 - beforeOrAt.secondsPerLiquidityCumulativeX128) *
-                            targetDelta) / observationTimeDelta
-                    )
-            );
+            unchecked {
+                uint32 observationTimeDelta = atOrAfter.blockTimestamp - beforeOrAt.blockTimestamp;
+                uint32 targetDelta = target - beforeOrAt.blockTimestamp;
+                return (
+                    beforeOrAt.tickCumulative +
+                        ((atOrAfter.tickCumulative - beforeOrAt.tickCumulative) / int56(uint56(observationTimeDelta))) *
+                        int56(uint56(targetDelta)),
+                    beforeOrAt.secondsPerLiquidityCumulativeX128 +
+                        uint160(
+                            (uint256(atOrAfter.secondsPerLiquidityCumulativeX128 - beforeOrAt.secondsPerLiquidityCumulativeX128) *
+                                targetDelta) / observationTimeDelta
+                        )
+                );
+            }
         }
     }
 
@@ -285,17 +292,15 @@ library Oracle {
     }
 
     /// @notice Increase the cardinality of the oracle array
-    /// @param self The stored oracle array
-    /// @param index The index of the observation that was most recently written to the observations array
     /// @param cardinality The number of populated elements in the oracle array
     /// @param cardinalityNext The new length of the oracle array, independent of population
     /// @return cardinalityNextOld The old length of the oracle array
     function grow(
-        Observation[65535] storage self,
-        uint16 index,
+        Observation[65535] storage /* self */,
+        uint16 /* index */,
         uint16 cardinality,
         uint16 cardinalityNext
-    ) internal returns (uint16 cardinalityNextOld) {
+    ) internal pure returns (uint16 cardinalityNextOld) {
         cardinalityNextOld = cardinalityNext;
         // no-op if the passed next cardinality isn't greater than the current next cardinality
         if (cardinalityNext <= cardinality) return cardinalityNextOld;

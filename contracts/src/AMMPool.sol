@@ -252,22 +252,24 @@ contract AMMPool is IAMMPool {
         if (exactInput) {
             uint256 amountIn = uint256(amountSpecified);
             
-            uint24 currentFee = fee;
-            if (slot0_.observationCardinality > 1) {
-                 uint256 volatility = VolatilityOracle.calculateVolatility(
-                     observations,
-                     uint32(block.timestamp),
-                     slot0_.tick,
-                     slot0_.observationIndex,
-                     liquidity,
-                     slot0_.observationCardinality,
-                     300 // 5 minute window
-                 );
-                 currentFee = VolatilityOracle.getDynamicFee(volatility, fee);
-            }
+            {
+                uint24 currentFee = fee;
+                if (slot0_.observationCardinality > 1) {
+                     uint256 volatility = VolatilityOracle.calculateVolatility(
+                         observations,
+                         uint32(block.timestamp),
+                         slot0_.tick,
+                         slot0_.observationIndex,
+                         liquidity,
+                         slot0_.observationCardinality,
+                         300 // 5 minute window
+                     );
+                     currentFee = VolatilityOracle.getDynamicFee(volatility, fee);
+                }
 
-            uint256 feeAmount = (amountIn * currentFee) / 1000000;
-            amountIn = amountIn - feeAmount;
+                uint256 feeAmount = (amountIn * currentFee) / 1000000;
+                amountIn = amountIn - feeAmount;
+            }
 
             // Simple constant product for basic functionality
             uint256 balance0 = IERC20(token0).balanceOf(address(this));
@@ -277,12 +279,12 @@ contract AMMPool is IAMMPool {
             if (zeroForOne) {
                 // Selling token0 for token1
                 amountOut = (amountIn * balance1) / (balance0 + amountIn);
-                amount0 = int256(amountIn + feeAmount);
+                amount0 = amountSpecified;
                 amount1 = -int256(amountOut);
             } else {
                 // Selling token1 for token0
                 amountOut = (amountIn * balance0) / (balance1 + amountIn);
-                amount1 = int256(amountIn + feeAmount);
+                amount1 = amountSpecified;
                 amount0 = -int256(amountOut);
             }
 
@@ -365,10 +367,12 @@ contract AMMPool is IAMMPool {
 
         tickInfo.liquidityGross = liquidityGrossAfter;
 
-        if (upper) {
-            tickInfo.liquidityNet = tickInfo.liquidityNet - liquidityDelta;
-        } else {
-            tickInfo.liquidityNet = tickInfo.liquidityNet + liquidityDelta;
+        unchecked {
+            if (upper) {
+                tickInfo.liquidityNet = tickInfo.liquidityNet - liquidityDelta;
+            } else {
+                tickInfo.liquidityNet = tickInfo.liquidityNet + liquidityDelta;
+            }
         }
 
         if (liquidityGrossBefore == 0) {
@@ -377,7 +381,7 @@ contract AMMPool is IAMMPool {
     }
 
     function increaseObservationCardinalityNext(uint16 observationCardinalityNext) external override lock {
-        uint16 observationCardinalityNextOld = slot0_.observationCardinalityNext; // for the event
+        // uint16 observationCardinalityNextOld = slot0_.observationCardinalityNext; // for the event
         uint16 observationCardinalityNextNew = observations.grow(
             slot0_.observationIndex,
             slot0_.observationCardinality,
