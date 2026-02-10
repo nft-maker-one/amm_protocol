@@ -6,6 +6,7 @@ import "./Oracle.sol";
 /// @title Volatility Oracle
 /// @notice Helper library to calculate volatility from Oracle observations
 library VolatilityOracle {
+    using Oracle for Oracle.Observation[65535];
     /// @notice Calculates the realized volatility between two observations
     /// @dev Uses the difference in tick cumulative values to estimate volatility
     /// @param oracle The oracle array
