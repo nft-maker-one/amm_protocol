@@ -1036,6 +1036,112 @@ export async function getFeeAmountTickSpacing(provider, fee) {
   return Number(result[0]);
 }
 
+/**
+ * Get all pools created by the factory from blockchain events
+ * This replaces localStorage dependency - works on all environments including Vercel
+ * @param {ethers.Provider} provider - Ethers provider
+ * @param {number} fromBlock - Starting block number (default: 0)
+ * @param {number} toBlock - Ending block number (default: 'latest')
+ * @returns {Promise<Array>} Array of pool objects with metadata
+ */
+export async function getAllPoolsFromBlockchain(provider, fromBlock = 0, toBlock = 'latest') {
+  try {
+    console.log('🔍 Fetching pools from blockchain...');
+    const factory = getFactory(provider);
+    
+    // Query PoolCreated events
+    const filter = factory.filters.PoolCreated();
+    const events = await factory.queryFilter(filter, fromBlock, toBlock);
+    
+    console.log(`✅ Found ${events.length} PoolCreated events`);
+    
+    // Process events and get pool details
+    const poolPromises = events.map(async (event) => {
+      try {
+        const { token0, token1, fee, tickSpacing, pool: poolAddress } = event.args;
+        
+        // Check if pool is initialized
+        let isInitialized = false;
+        let sqrtPriceX96 = '0';
+        try {
+          const slot0 = await readSlot0(provider, poolAddress);
+          sqrtPriceX96 = slot0[0].toString();
+          isInitialized = slot0[0] !== 0n;
+        } catch (err) {
+          console.warn(`⚠️ Could not read slot0 for pool ${poolAddress}:`, err.message);
+        }
+        
+        return {
+          address: poolAddress,
+          token0: token0.toLowerCase(),
+          token1: token1.toLowerCase(),
+          fee: Number(fee),
+          tickSpacing: Number(tickSpacing),
+          isInitialized,
+          sqrtPriceX96,
+          blockNumber: event.blockNumber,
+          transactionHash: event.transactionHash,
+          createdAt: Date.now(), // Fallback timestamp
+          updatedAt: Date.now()
+        };
+      } catch (err) {
+        console.error(`❌ Error processing pool event:`, err);
+        return null;
+      }
+    });
+    
+    const pools = await Promise.all(poolPromises);
+    
+    // Filter out null values (failed pools)
+    const validPools = pools.filter(p => p !== null);
+    
+    console.log(`✅ Successfully loaded ${validPools.length} pools from blockchain`);
+    return validPools;
+    
+  } catch (err) {
+    console.error('❌ Failed to fetch pools from blockchain:', err);
+    throw new Error(`Failed to fetch pools: ${err.message}`);
+  }
+}
+
+/**
+ * Get pools with token metadata
+ * @param {ethers.Provider} provider - Ethers provider
+ * @param {Array} tokenList - List of known tokens with metadata
+ * @returns {Promise<Array>} Pools with token metadata attached
+ */
+export async function getPoolsWithMetadata(provider, tokenList) {
+  try {
+    const pools = await getAllPoolsFromBlockchain(provider);
+    
+    // Create a map for quick token lookup
+    const tokenMap = new Map();
+    tokenList.forEach(token => {
+      tokenMap.set(token.address.toLowerCase(), token);
+    });
+    
+    // Attach metadata to pools
+    const poolsWithMetadata = pools.map(pool => ({
+      ...pool,
+      token0Meta: tokenMap.get(pool.token0) || { 
+        address: pool.token0, 
+        symbol: pool.token0.slice(0, 6) + '...', 
+        decimalsHint: 18 
+      },
+      token1Meta: tokenMap.get(pool.token1) || { 
+        address: pool.token1, 
+        symbol: pool.token1.slice(0, 6) + '...', 
+        decimalsHint: 18 
+      }
+    }));
+    
+    return poolsWithMetadata;
+  } catch (err) {
+    console.error('❌ Failed to get pools with metadata:', err);
+    return [];
+  }
+}
+
 // ========== Market analysis functions ==========
 
 /**

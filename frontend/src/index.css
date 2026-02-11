@@ -275,3 +275,13 @@ input:focus, select:focus {
   font-weight: bold;
   background-color: rgba(100, 108, 255, 0.1);
 }
+
+/* Spin animation for refresh button */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

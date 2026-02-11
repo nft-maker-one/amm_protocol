@@ -1,11 +1,15 @@
 // Pool management functionality
 import { ethers } from 'ethers';
-import { getPool, readSlot0 } from './amm';
+import { getPool, readSlot0, getAllPoolsFromBlockchain, getPoolsWithMetadata } from './amm';
 import { getTokenList } from './tokens';
 
 // Local storage keys
 const POOL_LIST_KEY = 'amm_pool_list';
 const SELECTED_POOL_KEY = 'amm_selected_pool';
+const POOL_SYNC_TIMESTAMP_KEY = 'amm_pool_sync_timestamp';
+
+// Cache duration: 5 minutes
+const CACHE_DURATION = 5 * 60 * 1000;
 
 /**
  * Pool list structure
@@ -20,7 +24,46 @@ export const getPoolList = () => {
 };
 
 /**
+ * Sync pools from blockchain and save to localStorage
+ * This function fetches all pools from blockchain events and updates the cache
+ * @param {ethers.Provider} provider - Ethers provider
+ * @param {boolean} force - Force refresh even if cache is valid
+ * @returns {Promise<Array>} Array of pools with metadata
+ */
+export const syncPoolsFromBlockchain = async (provider, force = false) => {
+  try {
+    // Check if we need to sync (cache is older than CACHE_DURATION)
+    if (!force) {
+      const lastSync = localStorage.getItem(POOL_SYNC_TIMESTAMP_KEY);
+      if (lastSync) {
+        const timeSinceSync = Date.now() - parseInt(lastSync);
+        if (timeSinceSync < CACHE_DURATION) {
+          console.log('✅ Using cached pools (synced', Math.floor(timeSinceSync / 1000), 'seconds ago)');
+          return getFilteredPoolList();
+        }
+      }
+    }
+    
+    console.log('🔄 Syncing pools from blockchain...');
+    const tokenList = getTokenList();
+    const pools = await getPoolsWithMetadata(provider, tokenList);
+    
+    // Save to localStorage
+    savePoolList(pools);
+    localStorage.setItem(POOL_SYNC_TIMESTAMP_KEY, Date.now().toString());
+    
+    console.log('✅ Synced', pools.length, 'pools from blockchain');
+    return pools;
+  } catch (err) {
+    console.error('❌ Failed to sync pools from blockchain:', err);
+    // Fallback to cached data
+    return getFilteredPoolList();
+  }
+};
+
+/**
  * Get filtered pool list - only includes pools where both tokens exist in the current token list
+ * Now with automatic blockchain sync on first load
  */
 export const getFilteredPoolList = () => {
   const pools = getPoolList();

@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
 import { 
   Layers, PlusCircle, PlayCircle, Code, 
-  Terminal, Trash2 
+  Terminal, Trash2, RefreshCw
 } from 'lucide-react';
 
-import { getFilteredPoolList, updatePoolInList, addPoolToList } from '../api/pools';
+import { getFilteredPoolList, updatePoolInList, addPoolToList, syncPoolsFromBlockchain } from '../api/pools';
 import PoolSelector from '../components/ui/PoolSelector';
 import TokenInputSelector from '../components/ui/TokenInputSelector';
 import PoolInfoCard from '../components/ui/PoolInfoCard';
@@ -20,6 +20,7 @@ import { FACTORY_BYTECODE, TOKEN_BYTECODE } from '../api/bytecodes';
 const DeploymentPage = () => {
   const [activeTab, setActiveTab] = useState('factory');
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [selectedPool, setSelectedPoolState] = useState(null);
   const [tokenList, setTokenList] = useState(getTokenList());
   const [poolList, setPoolList] = useState(getFilteredPoolList());
@@ -35,6 +36,43 @@ const DeploymentPage = () => {
   const [tokenSymbol, setTokenSymbol] = useState('');
   const [poolPrice, setPoolPrice] = useState('1'); 
   const [poolSqrtPriceX96, setPoolSqrtPriceX96] = useState('79228162514264337593543950336');
+
+  // Auto-sync pools from blockchain on mount
+  useEffect(() => {
+    const syncPools = async () => {
+      if (!window.ethereum) return;
+      
+      try {
+        setSyncing(true);
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        await syncPoolsFromBlockchain(provider, false); // Use cache if available
+        setPoolList(getFilteredPoolList());
+      } catch (err) {
+        console.error('Failed to sync pools:', err);
+      } finally {
+        setSyncing(false);
+      }
+    };
+    
+    syncPools();
+  }, []);
+
+  const handleRefreshPools = async () => {
+    if (!window.ethereum) return toast.error('Please connect wallet first');
+    
+    const toastId = toast.loading('Syncing pools from blockchain...');
+    try {
+      setSyncing(true);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      await syncPoolsFromBlockchain(provider, true); // Force refresh
+      setPoolList(getFilteredPoolList());
+      toast.success('Pools synced successfully!', { id: toastId });
+    } catch (err) {
+      toast.error('Failed to sync pools: ' + err.message, { id: toastId });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleDeployFactory = async () => {
     if (!window.ethereum) return toast.error('Please connect wallet first');
@@ -165,7 +203,44 @@ const DeploymentPage = () => {
 
   return (
     <div className="container">
-      <h2 style={{display:'flex', alignItems:'center', gap:10}}>Deployment Center</h2>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20, flexWrap: 'nowrap'}}>
+        <h2 style={{display:'flex', alignItems:'center', gap:10, margin:0, whiteSpace: 'nowrap'}}>Deployment Center</h2>
+        <button 
+          onClick={handleRefreshPools} 
+          disabled={syncing}
+          style={{
+            padding: '12px',
+            background: syncing ? '#555' : '#646cff',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: syncing ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <RefreshCw size={16} style={{animation: syncing ? 'spin 1s linear infinite' : 'none'}} />
+          {syncing ? 'Syncing...' : 'Refresh'}
+        </button>
+      </div>
+      
+      {syncing && (
+        <div style={{
+          padding: '12px',
+          background: '#1a3a52',
+          border: '1px solid #2563eb',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          fontSize: '0.9rem',
+          color: '#60a5fa'
+        }}>
+          🔄 Fetching pools from blockchain... This ensures all environments (Vercel/localhost) see the same data.
+        </div>
+      )}
+      
       <div style={{display: 'flex', gap: '10px', marginBottom: '25px', background: '#1a1a1a', padding: 5, borderRadius: 10}}>
         <TabButton id="factory" label="Factory" icon={Layers} />
         <TabButton id="token" label="Token" icon={Code} />
